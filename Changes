@@ -1,0 +1,12 @@
+Revision history for FCGI-Async
+
+0.03    2006-02-03/22:04:35
+        Bugfix to $request->finish(); make sure a request lingers long enough
+        to flush its write buffer
+
+0.02    2006-02-01/00:28:35
+        Second version, added remote responder support
+
+0.01    2005-12-28/01:50:26
+        First version, released on an unsuspecting world.
+

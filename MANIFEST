@@ -1,0 +1,12 @@
+Changes
+MANIFEST
+META.yml # Will be created by "make dist"
+Makefile.PL
+README
+lib/FCGI/Async.pm
+lib/FCGI/Async/Constants.pm
+lib/FCGI/Async/Request.pm
+t/00-load.t
+t/boilerplate.t
+t/pod-coverage.t
+t/pod.t
