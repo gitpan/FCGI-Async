@@ -1,11 +1,16 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         FCGI-Async
-version:      0.06
-version_from: lib/FCGI/Async.pm
-installdirs:  site
-requires:
-    Test::More:                    0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30_01
+---
+name: FCGI-Async
+version: 0.07
+author:
+  - 'Paul Evans <leonerd@leonerd.org.uk>'
+abstract: Module to allow use of FastCGI asynchronously
+license: perl
+provides:
+  FCGI::Async:
+    file: lib/FCGI/Async.pm
+    version: 0.07
+  FCGI::Async::Constants:
+    file: lib/FCGI/Async/Constants.pm
+  FCGI::Async::Request:
+    file: lib/FCGI/Async/Request.pm
+generated_by: Module::Build version 0.26

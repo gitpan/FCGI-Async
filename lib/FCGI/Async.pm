@@ -1,3 +1,8 @@
+#  You may distribute under the terms of either the GNU General Public License
+#  or the Artistic License (the same terms as Perl itself)
+#
+#  (C) Paul Evans, 2005,2006 -- leonerd@leonerd.org.uk
+
 package FCGI::Async;
 
 use warnings;
@@ -12,13 +17,9 @@ use IO::Socket::INET;
 
 FCGI::Async - Module to allow use of FastCGI asynchronously
 
-=head1 VERSION
-
-Version 0.03
-
 =cut
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 our $DEBUG = 0;
 
 =head1 SYNOPSIS
@@ -42,7 +43,45 @@ loop.
 
 =cut
 
-=head2 new
+=head2 $fcgi = FCGI::Async->new( %args )
+
+This function returns a new instance of a C<FCGI::Async> object, containing
+a master socket to listen on. The constructor returns immediately; it does not
+make any blocking calls.
+
+The function operates in one of three ways, depending on arguments 
+passed in the C<%args> hash:
+
+=over 4
+
+=item *
+
+Listening on an existing socket.
+
+ socket => $socket
+
+This must be a socket opened in listening mode, derived from C<IO::Socket>, or
+any other class that handles the C<fileno> and C<accept> methods in a similar
+way.
+
+=item *
+
+Creating a new listening socket.
+
+ port => $port
+
+A new C<IO::Socket::INET> socket will be opened on the given port number. It
+will listen on all interfaces, from all addresses.
+
+=item *
+
+Using the socket passed as STDIN from a webserver.
+
+When running a local FastCGI responder, the webserver will create a new INET
+socket connected to the script's STDIN file handle. To use the socket in this
+case, pass neither of the above options.
+
+=back
 
 =cut
 
@@ -82,7 +121,19 @@ sub new
    return bless $self, $class;
 }
 
-=head2 pre_select
+=head2 $fcgi->pre_select( $readref, $writeref, $exceptref, $timeref )
+
+In combination with the C<post_select> method, this method allows the
+C<FCGI::Async> object to interact with a program's existing C<select()> loop.
+By passing in references to three scalars of bitvectors, this method will
+register its interest in read- or writability on the given file descriptors,
+so that they will be included when the program calls C<select()>.
+
+The method also takes a reference to the timeout value, for completeness,
+though it is currently ignored.
+
+This method modifies the scalars referenced, and does not return any useful
+value.
 
 =cut
 
@@ -102,7 +153,14 @@ sub pre_select
    }
 }
 
-=head2 post_select
+=head2 $fcgi->post_select( $readvec, $writevec, $exceptvec )
+
+This method allows the C<FCGI::Async> object to interact with a program's
+existing C<select()> loop. After the program has called C<select()>, this
+method allows the FCGI object to operate with any of the file descriptors that
+have now become ready.
+
+This method returns no useful value.
 
 =cut
 
@@ -131,7 +189,14 @@ sub post_select
    }
 }
 
-=head2 select
+=head2 $ret = $fcgi->select()
+
+This method wraps calls to the C<pre_select()> and C<post_select()> methods,
+and a C<select()> syscall. It exists for convenience in cases where there are
+no other file descriptors the program wishes to wait on.
+
+It returns the value returned from the C<select()> syscall, though this value
+is unlikely to be interesting to the application.
 
 =cut
 
@@ -153,7 +218,13 @@ sub select
    return $ret;
 }
 
-=head2 waitingreq
+=head2 $req = $fcgi->waitingreq
+
+This method obtains a C<FCGI::Async::Request> object that is ready for some
+operation to be performed on it. If no request is ready, this method will
+return C<undef>.
+
+See L<FCGI::Async::Request> for more details.
 
 =cut
 
@@ -170,7 +241,7 @@ sub waitingreq
    return undef;
 }
 
-sub removereq
+sub _removereq
 {
    my $self = shift;
    my ( $req ) = @_;
@@ -185,55 +256,22 @@ sub removereq
    }
 }
 
-=head1 AUTHOR
+# Keep perl happy; keep Britain tidy
+1;
 
-Paul Evans, C<< <leonerd at leonerd.org.uk> >>
+__END__
 
-=head1 BUGS
-
-Please report any bugs or feature requests to
-C<bug-fcgi-async at rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=FCGI-Async>.
-I will be notified, and then you'll automatically be notified of progress on
-your bug as I make changes.
-
-=head1 SUPPORT
-
-You can find documentation for this module with the perldoc command.
-
-    perldoc FCGI::Async
-
-You can also look for information at:
+=head1 SEE ALSO
 
 =over 4
 
-=item * AnnoCPAN: Annotated CPAN documentation
+=item *
 
-L<http://annocpan.org/dist/FCGI-Async>
+L<CGI::Fast> - Fast CGI drop-in replacement of L<CGI>; single-threaded,
+blocking mode.
 
-=item * CPAN Ratings
+=head1 AUTHOR
 
-L<http://cpanratings.perl.org/d/FCGI-Async>
-
-=item * RT: CPAN's request tracker
-
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=FCGI-Async>
-
-=item * Search CPAN
-
-L<http://search.cpan.org/dist/FCGI-Async>
+Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>
 
 =back
-
-=head1 ACKNOWLEDGEMENTS
-
-=head1 COPYRIGHT & LICENSE
-
-Copyright 2005 Paul Evans, all rights reserved.
-
-This program is released under the following license: GPLv2
-
-=cut
-
-# Keep perl happy; keep Britain tidy
-1;

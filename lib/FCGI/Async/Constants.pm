@@ -1,6 +1,22 @@
+#  You may distribute under the terms of either the GNU General Public License
+#  or the Artistic License (the same terms as Perl itself)
+#
+#  (C) Paul Evans, 2005,2006 -- leonerd@leonerd.org.uk
+
 package FCGI::Async::Constants;
 
 use strict;
+
+=head1 NAME
+
+FCGI::Async::Constants - A module containing FastCGI protocol constants
+
+=head1 SYNOPSIS
+
+It should not be necessary to use this module directly; it is used internally
+by other L<FCGI::Async> modules to share protocol constants.
+
+=cut
 
 # A large number of constants
 my %constants = (

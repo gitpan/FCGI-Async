@@ -1,3 +1,8 @@
+#  You may distribute under the terms of either the GNU General Public License
+#  or the Artistic License (the same terms as Perl itself)
+#
+#  (C) Paul Evans, 2005,2006 -- leonerd@leonerd.org.uk
+
 package FCGI::Async::Request;
 
 use strict;
@@ -5,6 +10,12 @@ use strict;
 use base qw( FCGI::Async );
 
 use FCGI::Async::Constants;
+
+=head1 NAME
+
+FCGI::Async::Request - Class to represent one active FastCGI request
+
+=cut
 
 # The largest we'll try to send() down the network at any one time
 use constant MAXSENDSIZE => 4096;
@@ -14,6 +25,28 @@ use constant MAXSENDSIZE => 4096;
 use constant MAXRECORDDATA => 65535;
 
 use POSIX qw( EAGAIN );
+
+=head1 SYNOPSIS
+
+This module would not be used directly by a program using C<FCGI::Async>, but
+rather, objects in this class would be obtained by the C<waitingreq()> method:
+
+ my $fcgi = FCGI::Async->new();
+ while( 1 ) {
+    $fcgi->select();
+    while( my $req = $fcgi->waitingreq ) {
+       my $path = $req->param( "PATH_INFO" );
+       $req->print_stdout( "HTTP/1.0 200 OK\r\n" .
+                           "Content-type: text/plain\r\n" .
+                           "\r\n" .
+                           "You requested $path" );
+       $req->finish();
+    }
+ }
+
+=cut
+
+# Internal functions
 
 sub _debug($)
 {
@@ -135,7 +168,7 @@ sub writebuffer
       if( length( $buffer ) == 0 and $self->{state} == STATE_PENDINGREMOVE ) {
          _debug "$self has now finished flushing buffer; will now destruct"; 
          my $fcgi = $self->{fcgi};
-         $fcgi->removereq( $self );
+         $fcgi->_removereq( $self );
          return;
       }
 
@@ -304,11 +337,29 @@ sub dorecord
    $self->incomingrecord( $rec ) if $rec;
 }
 
+=head1 FUNCTIONS
+
+=cut
+
+=head2 $fd = $req->fileno
+
+This method returns the file descriptor for the socket underlying this
+particular FastCGI request.
+
+=cut
+
 sub fileno
 {
    my $self = shift;
    return fileno( $self->{S} );
 }
+
+=head2 %p = $req->params
+
+This method returns a copy of the hash of request parameters that had been
+sent by the webserver as part of the request.
+
+=cut
 
 sub params
 {
@@ -319,6 +370,13 @@ sub params
    return \%p;
 }
 
+=head2 $p = $req->param( $key )
+
+This method returns the value of a single request parameter, or C<undef> if no
+such key exists.
+
+=cut
+
 sub param
 {
    my $self = shift;
@@ -326,6 +384,13 @@ sub param
 
    return $self->{params}{$key};
 }
+
+=head2 $isready = $req->ready
+
+This method returns a true when the request is ready to be processed; i.e.,
+that the complete state has been streamed from the webserver.
+
+=cut
 
 sub ready
 {
@@ -335,6 +400,16 @@ sub ready
             $self->{paramsdone} and 
             $self->{state} != STATE_PENDINGREMOVE );
 }
+
+=head2 $line = $req->read_stdin_line
+
+This method works similarly to the C<< <HANDLE> >> operator. If at least one
+line of data is available then it is returned, including the linefeed, and
+removed from the buffer. If not, then any remaining partial line is returned
+and removed from the buffer. If no data is available any more, then C<undef>
+is returned instead.
+
+=cut
 
 sub read_stdin_line
 {
@@ -350,6 +425,13 @@ sub read_stdin_line
       return undef;
    }
 }
+
+=head2 $req->print_stdout( $data )
+
+This method appends the given data to the STDOUT stream of the FastCGI
+request, sending it to the webserver to be sent to the client.
+
+=cut
 
 sub print_stdout
 {
@@ -373,6 +455,16 @@ sub end_request
    $self->writerecord( { type => FCGI_END_REQUEST, content => $content } );
 }
 
+=head2 $req->finish
+
+When the request has been dealt with, this method should be called to indicate
+to the webserver that it is finished. After calling this method, no more data
+may be appended to the STDOUT stream. At some point after calling this method,
+the request object will be removed from the containing C<FCGI::Async> object,
+once all the buffered outbound data has been sent.
+
+=cut
+
 sub finish
 {
    my $self = shift;
@@ -386,9 +478,17 @@ sub finish
       $self->{state} = STATE_PENDINGREMOVE;
    }
    else {
-      $fcgi->removereq( $self );
+      $fcgi->_removereq( $self );
    }
 }
+
+=head2 $req->pre_select( $readref, $writeref, $exceptref, $timeref )
+
+This method is used by the corresponding method in C<FCGI::Async> to interact
+with the containing program's C<select()> loop. It should not be used
+directly.
+
+=cut
 
 sub pre_select
 {
@@ -404,6 +504,14 @@ sub pre_select
       vec( $$writeref, $fileno, 1 ) = 1;
    }
 }
+
+=head2 $req->post_select( $readvec, $writevec, $exceptvec )
+
+This method is used by the corresponding method in C<FCGI::Async> to interact
+with the containing program's C<select()> loop. It should not be used
+directly.
+
+=cut
 
 sub post_select
 {
