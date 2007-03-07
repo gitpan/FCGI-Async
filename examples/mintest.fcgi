@@ -1,9 +1,9 @@
 #!/usr/bin/perl -w
 
-use FCGI::Async;
+use strict;
 
-my $count = 0;
-my $fcgi = FCGI::Async->new();
+use FCGI::Async;
+use IO::Async::Set::IO_Poll;
 
 sub process_request($)
 {
@@ -38,10 +38,11 @@ EOF
    $req->finish();
 }
 
-while( 1 ) {
-   my $ret = $fcgi->select();
+my $set = IO::Async::Set::IO_Poll->new();
+my $fcgi = FCGI::Async->new( set => $set );
 
-   die "FCGI::Async->select() returned $!" unless( $ret > 0 );
+while( 1 ) {
+   $set->loop_once();
 
    while( my $req = $fcgi->waitingreq ) {
       process_request( $req );

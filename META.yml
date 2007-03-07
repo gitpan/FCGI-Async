@@ -1,14 +1,19 @@
 ---
 name: FCGI-Async
-version: 0.07
+version: 0.08
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 abstract: Module to allow use of FastCGI asynchronously
 license: perl
+requires:
+  IO::Async::Buffer: 0.02
+  IO::Async::Notifier: 0.02
 provides:
   FCGI::Async:
     file: lib/FCGI/Async.pm
-    version: 0.07
+    version: 0.08
+  FCGI::Async::BuildParse:
+    file: lib/FCGI/Async/BuildParse.pm
   FCGI::Async::Constants:
     file: lib/FCGI/Async/Constants.pm
   FCGI::Async::Request:

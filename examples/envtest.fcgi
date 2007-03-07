@@ -3,6 +3,7 @@
 use strict;
 
 use FCGI::Async;
+use IO::Async::Set::IO_Poll;
 
 sub process_request($)
 {
@@ -53,12 +54,11 @@ sub process_request($)
    $req->finish();
 }
 
-my $fcgi = FCGI::Async->new();
+my $set = IO::Async::Set::IO_Poll->new();
+my $fcgi = FCGI::Async->new( set => $set );
 
 while( 1 ) {
-   my $ret = $fcgi->select();
-
-   die "FCGI::Async->select() returned $!" unless( $ret > 0 );
+   $set->loop_once();
 
    while( my $req = $fcgi->waitingreq ) {
       process_request( $req );

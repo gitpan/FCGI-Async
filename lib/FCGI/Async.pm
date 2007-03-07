@@ -8,6 +8,8 @@ package FCGI::Async;
 use warnings;
 use strict;
 
+use base qw( IO::Async::Notifier );
+
 use FCGI::Async::Request;
 use FCGI::Async::Constants;
 
@@ -19,7 +21,7 @@ FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 our $DEBUG = 0;
 
 =head1 SYNOPSIS
@@ -113,109 +115,34 @@ sub new
       $socket = bless $socket, "IO::Socket::INET";
    }
 
-   my $self = { 
-      S    => $socket, 
-      reqs => [],
-   };
+   my $self = $class->SUPER::new( read_handle => $socket );
 
-   return bless $self, $class;
+   my $set = $args{set};
+
+   defined $set and ref $set and $set->isa( 'IO::Async::Set' ) or
+      die "Expected to be passed an IO::Async::Set";
+
+   $set->add( $self );
+
+   $self->{reqs} = [];
+
+   return $self;
 }
 
-=head2 $fcgi->pre_select( $readref, $writeref, $exceptref, $timeref )
-
-In combination with the C<post_select> method, this method allows the
-C<FCGI::Async> object to interact with a program's existing C<select()> loop.
-By passing in references to three scalars of bitvectors, this method will
-register its interest in read- or writability on the given file descriptors,
-so that they will be included when the program calls C<select()>.
-
-The method also takes a reference to the timeout value, for completeness,
-though it is currently ignored.
-
-This method modifies the scalars referenced, and does not return any useful
-value.
-
-=cut
-
-sub pre_select
+sub on_read_ready
 {
    my $self = shift;
-   my ( $readref, $writeref, $exceptref, $timeref ) = @_;
 
-   my $S = $self->{S};
-   my $Sfileno = $S->fileno;
    my $reqs = $self->{reqs};
 
-   vec( $$readref, $Sfileno, 1 ) = 1; # set STDIN
+   my $newS = $self->read_handle->accept() or die "Cannot accept() - $!";
 
-   foreach my $req ( @$reqs ) {
-      $req->pre_select( $readref, $writeref, $exceptref, $timeref );
-   }
-}
+   my $newreq = FCGI::Async::Request->new( $newS, $self );
 
-=head2 $fcgi->post_select( $readvec, $writevec, $exceptvec )
+   push @{$self->{reqs}}, $newreq;
 
-This method allows the C<FCGI::Async> object to interact with a program's
-existing C<select()> loop. After the program has called C<select()>, this
-method allows the FCGI object to operate with any of the file descriptors that
-have now become ready.
-
-This method returns no useful value.
-
-=cut
-
-sub post_select
-{
-   my $self = shift;
-   my ( $readvec, $writevec, $exceptvec ) = @_;
-
-   my $S = $self->{S};
-   my $Sfileno = $S->fileno;
-   my $reqs = $self->{reqs};
-
-   foreach my $req ( @$reqs ) {
-      $req->post_select( $readvec, $writevec, $exceptvec );
-   }
-
-   if ( vec( $readvec, $Sfileno, 1 ) ) {
-      vec( $readvec, $Sfileno, 1 ) = 0;
-
-      my $newS = $S->accept() or
-         die "Cannot accept() - $!";
-
-      my $newreq = FCGI::Async::Request->new( $newS, $self );
-
-      push @{$self->{reqs}}, $newreq;
-   }
-}
-
-=head2 $ret = $fcgi->select()
-
-This method wraps calls to the C<pre_select()> and C<post_select()> methods,
-and a C<select()> syscall. It exists for convenience in cases where there are
-no other file descriptors the program wishes to wait on.
-
-It returns the value returned from the C<select()> syscall, though this value
-is unlikely to be interesting to the application.
-
-=cut
-
-sub select
-{
-   my $self = shift;
-
-   my $rvec = '';
-   my $wvec = '';
-   my $evec = '';
-   my $timeout = undef;
-
-   $self->pre_select( \$rvec, \$wvec, \$evec, \$timeout );
-
-   my $ret = select( my $rout = $rvec, my $wout = $wvec, my $eout = $evec, $timeout );
-
-   $self->post_select( $rout, $wout, $eout );
-
-   return $ret;
+   my $set = $self->{set};
+   $set->add( $newreq );
 }
 
 =head2 $req = $fcgi->waitingreq
@@ -247,9 +174,12 @@ sub _removereq
    my ( $req ) = @_;
 
    my $reqs = $self->{reqs};
+   my $set  = $self->{set};
 
    for( my $i = 0; $i < scalar @$reqs; $i++ ) {
       if ( $reqs->[$i] == $req ) {
+         $set->remove( $reqs->[$i] );
+
          splice @$reqs, $i, 1;
          $i--;
       }

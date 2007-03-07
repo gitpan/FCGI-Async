@@ -7,9 +7,10 @@ package FCGI::Async::Request;
 
 use strict;
 
-use base qw( FCGI::Async );
+use base qw( IO::Async::Buffer );
 
 use FCGI::Async::Constants;
+use FCGI::Async::BuildParse;
 
 =head1 NAME
 
@@ -48,136 +49,66 @@ rather, objects in this class would be obtained by the C<waitingreq()> method:
 
 # Internal functions
 
-sub _debug($)
-{
-   my ( $message ) = @_;
-   warn $message if $FCGI::Async::DEBUG;
-}
-
 sub new
 {
    my $class = shift;
    my ( $sock, $fcgi ) = @_;
 
-   my $self = {
-      S          => $sock,
-      fcgi       => $fcgi,
-      state      => STATE_NEW,
-      stdin      => "",
-      stdindone  => 0,
-      params     => {},
-      paramsdone => 0,
-      writebuffer => "",
-   };
-   bless $self, $class;
+   my $self = $class->SUPER::new( handle => $sock );
 
-   $self->dorecord();
-
-   _debug "Instantiating a new FCGI::Async::Request";
+   $self->{fcgi}       = $fcgi;
+   $self->{state}      = STATE_NEW;
+   $self->{stdin}      = "";
+   $self->{stdindone}  = 0;
+   $self->{params}     = {};
+   $self->{paramsdone} = 0;
 
    return $self;
 }
 
-sub readrecord
+# Callback function for IO::Async::Buffer
+sub on_incoming_data
 {
    my $self = shift;
+   my ( $buffref, $handleclosed ) = @_;
 
-   my $rec = $self->readrecheader();
+   my $blen = length $$buffref;
 
-   return undef unless( defined $rec );
+   if( $handleclosed ) {
+      # Abort
+      my $fcgi = $self->{fcgi};
+      $fcgi->_removereq( $self );
+      return;
+   }
 
-   my $content = $self->readbuffer( $rec->{len} );
-   $self->readbuffer( $rec->{plen} ); # burn this one up
+   # Do we have a record header yet?
+   return 0 unless( $blen >= 8 );
 
-   $rec->{content} = $content;
+   # Excellent - parse it
+   my $rec = FCGI::Async::BuildParse::parse_record_header( $$buffref );
 
    die "Bad record version" unless( $rec->{ver} eq FCGI_VERSION_1 );
 
-   return $rec;
+   # Do we have enough for a complete record?
+   return 0 unless( $blen >= 8 + $rec->{len} + $rec->{plen} );
+
+   substr( $$buffref, 0, 8, "" ); # Header
+   $rec->{content} = substr( $$buffref, 0, $rec->{len}, "" );
+   substr( $$buffref, 0, $rec->{plen}, "" ); # Padding
+
+   $self->incomingrecord( $rec );
+
+   return 1;
 }
 
-sub readrecheader
+sub on_outgoing_empty
 {
    my $self = shift;
 
-   my $packedheader = $self->readbuffer( 8 );
-
-   return undef unless( defined $packedheader );
-
-   my ( $ver, $type, $reqid, $contentlen, $paddinglen, undef ) = unpack( "ccnncc", $packedheader ); # Requires 8 bytes
-
-   _debug "Have a header ver=$ver type=$type reqid=$reqid len=$contentlen (pad=$paddinglen)";
-   my %rec = ( ver   => $ver, 
-               type  => $type,
-               reqid => $reqid,
-               len   => $contentlen,
-               plen  => $paddinglen );
-   return \%rec;
-}
-
-sub readbuffer
-{
-   my $self = shift;
-   my ( $size ) = @_;
-
-   my $S = $self->{S};
-
-   my $buffer = '';
-   my $sofar = 0;
-
-   while( $size ) {
-      my $ret = sysread( $S, $buffer, $size, $sofar );
-      return undef if( $ret == 0 ); # Closed
-      die "Cannot sysread() - $!" if( $ret < 0 );
-      $size -= $ret;
-      $sofar += $ret;
+   if( $self->{state} == STATE_PENDINGREMOVE ) {
+      my $fcgi = $self->{fcgi};
+      $fcgi->_removereq( $self );
    }
-
-   return $buffer;
-}
-
-sub writebuffer
-{
-   my $self = shift;
-   
-   my $S = $self->{S};
-
-   my $buffer = $self->{writebuffer};
-   my $size   = length( $buffer );
-   $size = MAXSENDSIZE if( $size > MAXSENDSIZE );
-
-   _debug "$self is about to syswrite() $size bytes of data";
-   my $ret = syswrite( $S, $buffer, $size, 0 );
-   my $perror = $!+0;
-   my $perrorstr = "$!";
-
-   if( !defined $ret && $perror == EAGAIN ) {
-      # Nothing was send, would block. Just return for now
-      return;
-   }
-   
-   if( $ret == 0 ) {
-      die "Cannot syswrite() - connection closed"; # Closed
-   }
-   
-   if( defined $ret ) {
-      # Something was sent
-      _debug "$self wrote $ret bytes";
-      substr( $buffer, 0, $ret, "" );
-
-      if( length( $buffer ) == 0 and $self->{state} == STATE_PENDINGREMOVE ) {
-         _debug "$self has now finished flushing buffer; will now destruct"; 
-         my $fcgi = $self->{fcgi};
-         $fcgi->_removereq( $self );
-         return;
-      }
-
-      _debug "$self has a buffer of " . ( length $buffer ) . " bytes left";
-      $self->{writebuffer} = $buffer;
-      return;
-   }
-
-   die "Cannot syswrite() - $perrorstr";
 }
 
 sub writerecord
@@ -194,63 +125,13 @@ sub writerecord
    if( $contentlen > MAXRECORDDATA ) {
       warn __PACKAGE__."->writerecord() called with content longer than ".MAXRECORDDATA." bytes - truncating";
       $content = substr( $content, 0, MAXRECORDDATA );
-      $contentlen = MAXRECORDDATA;
    }
 
-   my ( $headbuffer ) = pack( "ccnncc", FCGI_VERSION_1, $rec->{type}, $self->{reqid}, $contentlen, 0, 0 );
+   $rec->{reqid} = $self->{reqid} unless defined $rec->{reqid};
 
-   my $buffer = $headbuffer . $content;
+   my $buffer = FCGI::Async::BuildParse::build_record( $rec, $content );
 
-   $self->{writebuffer} .= $buffer;
-
-   $self->writebuffer();
-}
-
-sub parsenamevalue
-{
-   my $self = shift;
-
-   my $namelen = unpack( "c", $_[0] );
-   if ( $namelen > 0x7f ) {
-      # It's a 4byte
-      $namelen = unpack( "N", $_[0] ) & 0x7fffffff;
-      substr( $_[0], 0, 4 ) = "";
-   }
-   else {
-      substr( $_[0], 0, 1 ) = "";
-   }
-
-   my $valuelen = unpack( "c", $_[0] );
-   if ( $valuelen > 0x7f ) {
-      # It's a 4byte
-      $valuelen = unpack( "N", $_[0] ) & 0x7fffffff;
-      substr( $_[0], 0, 4 ) = "";
-   }
-   else {
-      substr( $_[0], 0, 1 ) = "";
-   }
-
-   my $name = substr( $_[0], 0, $namelen );
-   substr( $_[0], 0, $namelen ) = "";
-
-   my $value = substr( $_[0], 0, $valuelen );
-   substr( $_[0], 0, $valuelen ) = "";
-   
-   return( $name, $value );
-}
-
-sub parsenamevalues
-{
-   my $self = shift;
-   my ( $buffer ) = @_;
-
-   my %values = ();
-   while( $buffer ) {
-      my ( $name, $value ) = $self->parsenamevalue( $buffer );
-      $values{$name} = $value;
-   }
-
-   return \%values;
+   $self->send( $buffer );
 }
 
 sub incomingrecord
@@ -270,7 +151,7 @@ sub incomingrecord
       $self->incomingrecord_stdin( $rec );
    }
    else {
-      _debug "$self just received unknown record type";
+      warn "$self just received unknown record type";
    }
 }
 
@@ -286,7 +167,6 @@ sub incomingrecord_begin
    my ( $role, $flags ) = unpack( "nc", $content );
    $self->{role} = $role;
    $self->{keepconn} = $flags & FCGI_KEEP_CONN;
-   _debug "$self now in active state for id $self->{reqid} role $role flags $flags";
 }
 
 sub incomingrecord_params
@@ -298,16 +178,14 @@ sub incomingrecord_params
    my $len     = $rec->{len};
 
    if( $len ) {
-      my $paramshash = $self->parsenamevalues( $content );
+      my $paramshash = FCGI::Async::BuildParse::parse_namevalues( $content );
       my $p = $self->{params};
       foreach ( keys %$paramshash ) {
          $p->{$_} = $paramshash->{$_};
       }
-      _debug "$self now received " . ( scalar %$paramshash ) . " more params";
    }
    else {
       $self->{paramsdone} = 1;
-      _debug "$self has now finished params";
    }
 }
 
@@ -320,39 +198,16 @@ sub incomingrecord_stdin
    my $len     = $rec->{len};
 
    if( $len ) {
-      _debug "$self is now receiving more STDIN";
       $self->{stdin} .= $content;
    }
    else {
-      _debug "$self has finished receiving STDIN";
       $self->{stdindone} = 1;
    }
-}
-
-sub dorecord
-{
-   my $self = shift;
-   
-   my $rec = $self->readrecord;
-   $self->incomingrecord( $rec ) if $rec;
 }
 
 =head1 FUNCTIONS
 
 =cut
-
-=head2 $fd = $req->fileno
-
-This method returns the file descriptor for the socket underlying this
-particular FastCGI request.
-
-=cut
-
-sub fileno
-{
-   my $self = shift;
-   return fileno( $self->{S} );
-}
 
 =head2 %p = $req->params
 
@@ -472,62 +327,7 @@ sub finish
    $self->print_stdout( "" );
    $self->end_request( 0, FCGI_REQUEST_COMPLETE );
 
-   my $fcgi = $self->{fcgi};
-
-   if ( length( $self->{writebuffer} ) > 0 ) {
-      $self->{state} = STATE_PENDINGREMOVE;
-   }
-   else {
-      $fcgi->_removereq( $self );
-   }
-}
-
-=head2 $req->pre_select( $readref, $writeref, $exceptref, $timeref )
-
-This method is used by the corresponding method in C<FCGI::Async> to interact
-with the containing program's C<select()> loop. It should not be used
-directly.
-
-=cut
-
-sub pre_select
-{
-   my $self = shift;
-   my ( $readref, $writeref, $exceptref, $timeref ) = @_;
-
-   my $fileno = $self->fileno;
-
-   vec( $$readref, $fileno, 1 ) = 1;
-
-   if( length( $self->{writebuffer} ) > 0 ) {
-      _debug "$self has writebuffer - adding to writevec";
-      vec( $$writeref, $fileno, 1 ) = 1;
-   }
-}
-
-=head2 $req->post_select( $readvec, $writevec, $exceptvec )
-
-This method is used by the corresponding method in C<FCGI::Async> to interact
-with the containing program's C<select()> loop. It should not be used
-directly.
-
-=cut
-
-sub post_select
-{
-   my $self = shift;
-   my ( $readvec, $writevec, $exceptvec ) = @_;
-
-   my $fileno = $self->fileno;
-
-   if( vec( $readvec, $fileno, 1 ) ) {
-      $self->dorecord();
-   }
-
-   if( vec( $writevec, $fileno, 1 ) ) {
-      _debug "$self is writable - will try resending output";
-      $self->writebuffer();
-   }
+   $self->{state} = STATE_PENDINGREMOVE;
 }
 
 # Keep perl happy; keep Britain tidy

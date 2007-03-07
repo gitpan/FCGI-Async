@@ -1,14 +1,14 @@
 Build.PL
 Changes
-envtest.fcgi
+examples/envtest.fcgi
+examples/mintest.fcgi
 fcgi-spec.html
 lib/FCGI/Async.pm
+lib/FCGI/Async/BuildParse.pm
 lib/FCGI/Async/Constants.pm
 lib/FCGI/Async/Request.pm
 MANIFEST			This list of files
-mintest.fcgi
-README
-t/00-load.t
-t/pod-coverage.t
-t/pod.t
 META.yml
+README
+t/01use.t
+t/02fcgi.t
