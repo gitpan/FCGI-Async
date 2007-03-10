@@ -10,7 +10,7 @@ use strict;
 
 use base qw( IO::Async::Notifier );
 
-use FCGI::Async::Request;
+use FCGI::Async::ClientConnection;
 use FCGI::Async::Constants;
 
 use IO::Socket::INET;
@@ -21,23 +21,31 @@ FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 our $DEBUG = 0;
 
 =head1 SYNOPSIS
 
 This module allows a program to respond to FastCGI requests using an
-asynchronous model. The program would typically be structured as a C<select()>
-loop.
+asynchronous model. It is based on L<IO::Async> and will fully interact with
+any program using this base.
 
-    use FCGI::Async;
+ use FCGI::Async;
+ use IO::Async::Set::IO_Poll;
 
-    my $fcgi = FCGI::Async->new();
-    
-    while( 1 ) {
-       $fcgi->select();
-       # perform non-blocking tasks here
+ my $fcgi = FCGI::Async->new(
+    on_request => sub {
+       my ( $fcgi, $req ) = @_;
+
+       # Handle the request here
     }
+ );
+
+ my $set = IO::Async::Set::IO_Poll->new();
+
+ $set->add( $fcgi );
+
+ $set->loop_forever;
 
 =cut
     
@@ -85,6 +93,20 @@ case, pass neither of the above options.
 
 =back
 
+The C<%args> hash must also contain a CODE reference to a callback function to
+call when a new FastCGI request arrives
+
+ on_request => sub { ... }
+
+or
+
+ on_request => \&handler
+
+This will be passed two parameters; the C<FCGI::Async> container object, and a
+new C<FCGI::Async::Request> object representing the specific request.
+
+ $on_request->( $fcgi, $request )
+
 =cut
 
 sub new
@@ -117,14 +139,10 @@ sub new
 
    my $self = $class->SUPER::new( read_handle => $socket );
 
-   my $set = $args{set};
+   warn "You no longer have to supply a 'set' argument to FCGI::Async->new() - it has been ignored"
+      if exists $args{set};
 
-   defined $set and ref $set and $set->isa( 'IO::Async::Set' ) or
-      die "Expected to be passed an IO::Async::Set";
-
-   $set->add( $self );
-
-   $self->{reqs} = [];
+   $self->{on_request} = $args{on_request};
 
    return $self;
 }
@@ -133,57 +151,19 @@ sub on_read_ready
 {
    my $self = shift;
 
-   my $reqs = $self->{reqs};
-
    my $newS = $self->read_handle->accept() or die "Cannot accept() - $!";
 
-   my $newreq = FCGI::Async::Request->new( $newS, $self );
+   my $newreq = FCGI::Async::ClientConnection->new( $newS, $self );
 
-   push @{$self->{reqs}}, $newreq;
-
-   my $set = $self->{set};
-   $set->add( $newreq );
+   $self->add_child( $newreq );
 }
 
-=head2 $req = $fcgi->waitingreq
-
-This method obtains a C<FCGI::Async::Request> object that is ready for some
-operation to be performed on it. If no request is ready, this method will
-return C<undef>.
-
-See L<FCGI::Async::Request> for more details.
-
-=cut
-
-sub waitingreq
-{
-   my $self = shift;
-
-   my $reqs = $self->{reqs};
-
-   foreach my $req ( @$reqs ) {
-      return $req if( $req->ready );
-   }
-
-   return undef;
-}
-
-sub _removereq
+sub _request_ready
 {
    my $self = shift;
    my ( $req ) = @_;
 
-   my $reqs = $self->{reqs};
-   my $set  = $self->{set};
-
-   for( my $i = 0; $i < scalar @$reqs; $i++ ) {
-      if ( $reqs->[$i] == $req ) {
-         $set->remove( $reqs->[$i] );
-
-         splice @$reqs, $i, 1;
-         $i--;
-      }
-   }
+   $self->{on_request}->( $self, $req );
 }
 
 # Keep perl happy; keep Britain tidy

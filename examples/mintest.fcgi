@@ -5,9 +5,9 @@ use strict;
 use FCGI::Async;
 use IO::Async::Set::IO_Poll;
 
-sub process_request($)
+sub on_request
 {
-   my ( $req ) = @_;
+   my ( $fcgi, $req ) = @_;
 
    my $env = $req->params();
 
@@ -38,13 +38,11 @@ EOF
    $req->finish();
 }
 
+my $fcgi = FCGI::Async->new(
+   on_request => \&on_request,
+);
+
 my $set = IO::Async::Set::IO_Poll->new();
-my $fcgi = FCGI::Async->new( set => $set );
+$set->add( $fcgi );
 
-while( 1 ) {
-   $set->loop_once();
-
-   while( my $req = $fcgi->waitingreq ) {
-      process_request( $req );
-   }
-}
+$set->loop_forever();

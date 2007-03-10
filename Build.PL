@@ -9,9 +9,12 @@ my $build = Module::Build->new
    dist_author => 'Paul Evans <leonerd@leonerd.org.uk>',
    dist_version_from => 'lib/FCGI/Async.pm',
    requires => {
-                 'IO::Async::Notifier' => '0.02',
-                 'IO::Async::Buffer'   => '0.02',
+                 'IO::Async::Notifier' => '0.03',
+                 'IO::Async::Buffer'   => '0.03',
                },
+   build_requires => {
+                        'Test::More' => 0,
+                     },
    license => 'perl',
   );
   

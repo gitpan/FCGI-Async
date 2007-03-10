@@ -7,8 +7,6 @@ package FCGI::Async::Request;
 
 use strict;
 
-use base qw( IO::Async::Buffer );
-
 use FCGI::Async::Constants;
 use FCGI::Async::BuildParse;
 
@@ -30,12 +28,16 @@ use POSIX qw( EAGAIN );
 =head1 SYNOPSIS
 
 This module would not be used directly by a program using C<FCGI::Async>, but
-rather, objects in this class would be obtained by the C<waitingreq()> method:
+rather, objects in this class are passed into the C<on_request> callback of
+the containing C<FCGI::Async> object.
 
- my $fcgi = FCGI::Async->new();
- while( 1 ) {
-    $fcgi->select();
-    while( my $req = $fcgi->waitingreq ) {
+ use FCGI::Async;
+ use IO::Async::Set::IO_Poll;
+
+ my $fcgi = FCGI::Async->new(
+    on_request => sub {
+       my ( $fcgi, $req ) = @_;
+
        my $path = $req->param( "PATH_INFO" );
        $req->print_stdout( "HTTP/1.0 200 OK\r\n" .
                            "Content-type: text/plain\r\n" .
@@ -43,7 +45,13 @@ rather, objects in this class would be obtained by the C<waitingreq()> method:
                            "You requested $path" );
        $req->finish();
     }
- }
+ );
+
+ my $set = IO::Async::Set::IO_Poll->new();
+
+ $set->add( $fcgi );
+
+ $set->loop_forever;
 
 =cut
 
@@ -52,73 +60,37 @@ rather, objects in this class would be obtained by the C<waitingreq()> method:
 sub new
 {
    my $class = shift;
-   my ( $sock, $fcgi ) = @_;
+   my %args = @_;
 
-   my $self = $class->SUPER::new( handle => $sock );
+   my $rec = $args{rec};
 
-   $self->{fcgi}       = $fcgi;
-   $self->{state}      = STATE_NEW;
-   $self->{stdin}      = "";
-   $self->{stdindone}  = 0;
-   $self->{params}     = {};
-   $self->{paramsdone} = 0;
+   my $content = $rec->{content};
+   my ( $role, $flags ) = unpack( "nc", $content );
+
+   my $self = bless {
+      conn       => $args{conn},
+      fcgi       => $args{fcgi},
+
+      reqid      => $rec->{reqid},
+      role       => $role,
+      keepconn   => $flags & FCGI_KEEP_CONN,
+
+      state      => STATE_ACTIVE,
+      stdin      => "",
+      stdindone  => 0,
+      params     => {},
+      paramsdone => 0,
+
+      used_stderr => 0,
+   }, $class;
 
    return $self;
-}
-
-# Callback function for IO::Async::Buffer
-sub on_incoming_data
-{
-   my $self = shift;
-   my ( $buffref, $handleclosed ) = @_;
-
-   my $blen = length $$buffref;
-
-   if( $handleclosed ) {
-      # Abort
-      my $fcgi = $self->{fcgi};
-      $fcgi->_removereq( $self );
-      return;
-   }
-
-   # Do we have a record header yet?
-   return 0 unless( $blen >= 8 );
-
-   # Excellent - parse it
-   my $rec = FCGI::Async::BuildParse::parse_record_header( $$buffref );
-
-   die "Bad record version" unless( $rec->{ver} eq FCGI_VERSION_1 );
-
-   # Do we have enough for a complete record?
-   return 0 unless( $blen >= 8 + $rec->{len} + $rec->{plen} );
-
-   substr( $$buffref, 0, 8, "" ); # Header
-   $rec->{content} = substr( $$buffref, 0, $rec->{len}, "" );
-   substr( $$buffref, 0, $rec->{plen}, "" ); # Padding
-
-   $self->incomingrecord( $rec );
-
-   return 1;
-}
-
-sub on_outgoing_empty
-{
-   my $self = shift;
-
-   if( $self->{state} == STATE_PENDINGREMOVE ) {
-      my $fcgi = $self->{fcgi};
-      $fcgi->_removereq( $self );
-   }
 }
 
 sub writerecord
 {
    my $self = shift;
    my ( $rec ) = @_;
-
-   if( $self->{state} == STATE_PENDINGREMOVE ) {
-      die "Cannot append further output data to a request in pendingremove state";
-   }
 
    my $content = $rec->{content};
    my $contentlen = length( $content );
@@ -129,9 +101,10 @@ sub writerecord
 
    $rec->{reqid} = $self->{reqid} unless defined $rec->{reqid};
 
-   my $buffer = FCGI::Async::BuildParse::build_record( $rec, $content );
+   my $conn = $self->{conn};
 
-   $self->send( $buffer );
+   $conn->sendrecord( $rec, $content );
+
 }
 
 sub incomingrecord
@@ -141,10 +114,7 @@ sub incomingrecord
 
    my $type    = $rec->{type};
 
-   if( $type == FCGI_BEGIN_REQUEST ) {
-      $self->incomingrecord_begin( $rec );
-   }
-   elsif( $type == FCGI_PARAMS ) {
+   if( $type == FCGI_PARAMS ) {
       $self->incomingrecord_params( $rec );
    }
    elsif( $type == FCGI_STDIN ) {
@@ -155,18 +125,13 @@ sub incomingrecord
    }
 }
 
-sub incomingrecord_begin
+sub _ready_check
 {
    my $self = shift;
-   my ( $rec ) = @_;
 
-   my $content = $rec->{content};
-
-   $self->{state} = STATE_ACTIVE;
-   $self->{reqid} = $rec->{reqid};
-   my ( $role, $flags ) = unpack( "nc", $content );
-   $self->{role} = $role;
-   $self->{keepconn} = $flags & FCGI_KEEP_CONN;
+   if( $self->{stdindone} and $self->{paramsdone} ) {
+      $self->{fcgi}->_request_ready( $self );
+   }
 }
 
 sub incomingrecord_params
@@ -187,6 +152,8 @@ sub incomingrecord_params
    else {
       $self->{paramsdone} = 1;
    }
+
+   $self->_ready_check;
 }
 
 sub incomingrecord_stdin
@@ -203,6 +170,8 @@ sub incomingrecord_stdin
    else {
       $self->{stdindone} = 1;
    }
+
+   $self->_ready_check;
 }
 
 =head1 FUNCTIONS
@@ -240,22 +209,6 @@ sub param
    return $self->{params}{$key};
 }
 
-=head2 $isready = $req->ready
-
-This method returns a true when the request is ready to be processed; i.e.,
-that the complete state has been streamed from the webserver.
-
-=cut
-
-sub ready
-{
-   my $self = shift;
-
-   return ( $self->{stdindone} and 
-            $self->{paramsdone} and 
-            $self->{state} != STATE_PENDINGREMOVE );
-}
-
 =head2 $line = $req->read_stdin_line
 
 This method works similarly to the C<< <HANDLE> >> operator. If at least one
@@ -281,6 +234,18 @@ sub read_stdin_line
    }
 }
 
+sub _print_stream
+{
+   my $self = shift;
+   my ( $data, $stream ) = @_;
+
+   while( length $data ) {
+      # Send chunks of up to MAXRECORDDATA bytes at once
+      my $chunk = substr( $data, 0, MAXRECORDDATA, "" );
+      $self->writerecord( { type => $stream, content => $chunk } );
+   }
+}
+
 =head2 $req->print_stdout( $data )
 
 This method appends the given data to the STDOUT stream of the FastCGI
@@ -293,11 +258,23 @@ sub print_stdout
    my $self = shift;
    my ( $data ) = @_;
 
-   while( length $data ) {
-      # Send chunks of up to MAXRECORDDATA bytes at once
-      my $chunk = substr( $data, 0, MAXRECORDDATA, "" );
-      $self->writerecord( { type => FCGI_STDOUT, content => $chunk } );
-   }
+   $self->_print_stream( $data, FCGI_STDOUT );
+}
+
+=head2 $req->print_stderr( $data )
+
+This method appends the given data to the STDERR stream of the FastCGI
+request, sending it to the webserver.
+
+=cut
+
+sub print_stderr
+{
+   my $self = shift;
+   my ( $data ) = @_;
+
+   $self->{used_stderr} = 1;
+   $self->_print_stream( $data, FCGI_STDERR );
 }
 
 sub end_request
@@ -324,10 +301,16 @@ sub finish
 {
    my $self = shift;
 
-   $self->print_stdout( "" );
+   # Signal the end of STDOUT
+   $self->writerecord( { type => FCGI_STDOUT, content => "" } );
+
+   # Signal the end of STDERR if we used it
+   $self->writerecord( { type => FCGI_STDERR, content => "" } ) if $self->{used_stderr};
+
    $self->end_request( 0, FCGI_REQUEST_COMPLETE );
 
-   $self->{state} = STATE_PENDINGREMOVE;
+   my $conn = $self->{conn};
+   $conn->_removereq( $self->{reqid} );
 }
 
 # Keep perl happy; keep Britain tidy

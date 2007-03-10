@@ -1,14 +1,19 @@
 Build.PL
 Changes
 examples/envtest.fcgi
+examples/fortune.fcgi
 examples/mintest.fcgi
 fcgi-spec.html
 lib/FCGI/Async.pm
 lib/FCGI/Async/BuildParse.pm
+lib/FCGI/Async/ClientConnection.pm
 lib/FCGI/Async/Constants.pm
 lib/FCGI/Async/Request.pm
 MANIFEST			This list of files
 META.yml
 README
 t/01use.t
-t/02fcgi.t
+t/02request-minimal.t
+t/03request-full.t
+t/04request-reuse.t
+t/05request-multiplex.t
