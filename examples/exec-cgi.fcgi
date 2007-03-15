@@ -11,38 +11,62 @@ use IO::Async::Set::IO_Poll;
 use IPC::Open3;
 use POSIX qw( WNOHANG );
 
-my $FORTUNE = "/usr/games/fortune";
-
 my %childdeathmap;
 
 sub on_request
 {
    my ( $fcgi, $req ) = @_;
+
+   my %req_env = %{ $req->params };
+
+   # Determine these however you like; perhaps examine $req
+   my $handler = "sample.cgi";
+   my @handler_args = ();
    
    # These following variables are important because we're about to form a
    # number of closures over them
-   my ( $childin, $childout, $childerr ) = map { IO::Handle->new } ( 0 .. 2 );
-   my $kid = open3( $childin, $childout, $childerr, $FORTUNE );
+   pipe( my $C_STDIN,  my $childin  ) and
+   pipe( my $childout, my $C_STDOUT ) and
+   pipe( my $childerr, my $C_STDERR ) or do {
+      $req->print_stdout(
+         "Content-type: text/plain\r\n" .
+         "\r\n" .
+         "Could not pipe - $!\r\n"
+      );
+
+      $req->finish;
+      return;
+   };
+
+   my $kid = fork();
 
    if( !defined $kid ) {
       $req->print_stdout(
          "Content-type: text/plain\r\n" .
          "\r\n" .
-         "Could not run $FORTUNE - $!\r\n"
+         "Could not run $handler - $!\r\n"
       );
 
       $req->finish;
       return;
    }
 
-   # Print CGI header
-   $req->print_stdout(
-      "Content-type: text/html\r\n" .
-      "\r\n" .
-      "<html>" . 
-      " <head><title>Fortune</title></head>" . 
-      " <body><h1>$FORTUNE says:</h1>"
-   );
+   if( $kid == 0 ) {
+      # I'm the child
+
+      # Copy the request environment
+      %ENV = %req_env;
+
+      # Set up the IN/OUT/ERR filehandles
+      open( STDIN,  "<&", $C_STDIN );
+      open( STDOUT, ">&", $C_STDOUT );
+      open( STDERR, ">&", $C_STDERR );
+
+      # setuid / setgid / chdir / do whatever you like here
+
+      exec( $handler, @handler_args );
+      die "Could not exec $handler - $!";
+   }
 
    # We consider the request finished when all the following three conditions
    # are satisfied:
@@ -53,12 +77,44 @@ sub on_request
    # they all hold. We don't know what order these might be reported to us in
    # so we have to check all three each time one of them becomes true.
    my $finishhandler = sub {
+      return if defined $childin;
       return if defined $childout;
       return if defined $childerr;
       return if defined $kid;
 
       $req->finish;
    };
+
+   # Child's STDIN
+   my $childin_notifier = IO::Async::Buffer->new(
+      handle => $childin,
+
+      on_incoming_data => sub { }, # Ignore it
+
+      on_outgoing_empty => sub {
+         my ( $notifier ) = @_;
+
+         $fcgi->remove_child( $notifier );
+
+         undef $childin;
+         $finishhandler->();
+      }
+   );
+
+   my $did_stdin = 0;
+
+   while( defined( my $line = $req->read_stdin_line ) ) {
+      $childin_notifier->send( $line );
+
+      $did_stdin = 1;
+   }
+
+   if( $did_stdin ) {
+      $fcgi->add_child( $childin_notifier );
+   }
+   else {
+      undef $childin;
+   }
 
    # Child's STDOUT
 
@@ -68,18 +124,11 @@ sub on_request
       on_incoming_data => sub {
          my ( $notifier, $buffref, $closed ) = @_;
 
-         if( $$buffref =~ s{^(.*?)\n}{} ) {
-            $req->print_stdout( "<p>$1</p>" );
-            return 1;
-         }
+         $req->print_stdout( $$buffref );
+         $$buffref = "";
 
          if( $closed ) {
             $fcgi->remove_child( $notifier );
-
-            # Deal with a final partial line the child may have written
-            $req->print_stdout( "<p>$$buffref</p>" ) if length $$buffref;
-
-            $req->print_stdout( "</body></html>" );
 
             # Mark that condition 1 above is true, and check for finishing
             undef $childout;
@@ -96,6 +145,7 @@ sub on_request
 
    my $childerr_notifier = IO::Async::Buffer->new(
       read_handle => $childerr,
+
       on_incoming_data => sub {
          my ( $notifier, $buffref, $closed ) = @_;
 
@@ -141,7 +191,7 @@ $set->add( IO::Async::SignalProxy->new(
    signal_CHLD => sub {
       while( 1 ) {
          my $zid = waitpid( -1, WNOHANG );
-         last if !defined $zid or $zid == -1;
+         last if !defined $zid or $zid < 1;
 
          $childdeathmap{$zid}->() if defined $childdeathmap{$zid};
          undef $childdeathmap{$zid};

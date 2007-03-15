@@ -91,7 +91,7 @@ is_deeply( $req->params,
            {},
            '$req has empty params hash' );
 is( $req->read_stdin_line,
-    "",
+    undef,
     '$req has empty STDIN' );
 
 $req->finish;

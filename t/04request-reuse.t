@@ -93,7 +93,7 @@ is_deeply( $req->params,
            { NAME => 'first' },
            '$req params' );
 is( $req->read_stdin_line,
-    "",
+    undef,
     '$req has empty STDIN' );
 
 $req->print_stdout( "one" );
@@ -136,7 +136,7 @@ is_deeply( $req->params,
            { NAME => 'second' },
            '$req params' );
 is( $req->read_stdin_line,
-    "",
+    undef,
     '$req has empty STDIN' );
 
 $req->print_stdout( "two" );

@@ -1,7 +1,7 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005,2006 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2007 -- leonerd@leonerd.org.uk
 
 package FCGI::Async;
 
@@ -21,7 +21,7 @@ FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 our $DEBUG = 0;
 
 =head1 SYNOPSIS

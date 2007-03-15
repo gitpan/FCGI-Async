@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 10;
+use Test::More tests => 13;
 
 use IO::Socket::INET;
 use IO::Async::Set::IO_Poll;
@@ -80,7 +80,9 @@ $C->syswrite(
    # End of parameters
    fcgi_trans( type => 4, id => 1, data => "" ) .
    # STDIN
-   fcgi_trans( type => 5, id => 1, data => "Hello, FastCGI script" ) .
+   fcgi_trans( type => 5, id => 1, data => "Hello, FastCGI script\r\n" . 
+                                           "Here are several lines of data\r\n" .
+                                           "They should appear on STDIN\r\n" ) .
    # End of STDIN
    fcgi_trans( type => 5, id => 1, data => "" )
 );
@@ -95,8 +97,17 @@ is_deeply( $req->params,
            { FOO => 'foo', SPLOT => 'splot' },
            '$req has correct params' );
 is( $req->read_stdin_line,
-    "Hello, FastCGI script",
-    '$req has correct STDIN' );
+    "Hello, FastCGI script\r\n",
+    '$req has correct STDIN line 1' );
+is( $req->read_stdin_line,
+    "Here are several lines of data\r\n",
+    '$req has correct STDIN line 2' );
+is( $req->read_stdin_line,
+    "They should appear on STDIN\r\n",
+    '$req has correct STDIN line 3' );
+is( $req->read_stdin_line,
+    undef,
+    '$req has correct STDIN finish' );
 
 $req->print_stdout( "Hello, world!" );
 $req->print_stderr( "Some errors occured\n" );

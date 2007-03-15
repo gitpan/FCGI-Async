@@ -16,6 +16,7 @@ my $build = Module::Build->new
                         'Test::More' => 0,
                      },
    license => 'perl',
+   create_makefile_pl => 'traditional',
   );
   
 $build->create_build_script;
