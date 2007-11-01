@@ -42,7 +42,7 @@ sub parse_namevalue
 {
    # THIS FUNCTION MODIFIES $_[0]
 
-   my $namelen = unpack( "c", $_[0] );
+   my $namelen = unpack( "C", $_[0] );
    if ( $namelen > 0x7f ) {
       # It's a 4byte
       $namelen = unpack( "N", $_[0] ) & 0x7fffffff;
@@ -52,7 +52,7 @@ sub parse_namevalue
       substr( $_[0], 0, 1 ) = "";
    }
 
-   my $valuelen = unpack( "c", $_[0] );
+   my $valuelen = unpack( "C", $_[0] );
    if ( $valuelen > 0x7f ) {
       # It's a 4byte
       $valuelen = unpack( "N", $_[0] ) & 0x7fffffff;

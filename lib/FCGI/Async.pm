@@ -21,7 +21,7 @@ FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 our $DEBUG = 0;
 
 =head1 SYNOPSIS
@@ -179,6 +179,15 @@ __END__
 
 L<CGI::Fast> - Fast CGI drop-in replacement of L<CGI>; single-threaded,
 blocking mode.
+
+=item *
+
+L<http://hoohoo.ncsa.uiuc.edu/cgi/interface.html> - The Common Gateway
+Interface Specification
+
+=item *
+
+L<http://www.fastcgi.com/devkit/doc/fcgi-spec.html> - FastCGI Specification
 
 =head1 AUTHOR
 

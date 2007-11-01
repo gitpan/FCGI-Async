@@ -1,6 +1,6 @@
 ---
 name: FCGI-Async
-version: 0.10
+version: 0.11
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 abstract: Module to allow use of FastCGI asynchronously
@@ -13,7 +13,7 @@ build_requires:
 provides:
   FCGI::Async:
     file: lib/FCGI/Async.pm
-    version: 0.10
+    version: 0.11
   FCGI::Async::BuildParse:
     file: lib/FCGI/Async/BuildParse.pm
   FCGI::Async::ClientConnection:

@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 9;
+use Test::More tests => 12;
 
 use IO::Async::Set::IO_Poll;
 
@@ -38,7 +38,9 @@ $C->syswrite(
    fcgi_trans( type => 1, id => 1, data => "\0\1\0\0\0\0\0\0" ) .
    # No parameters
    fcgi_trans( type => 4, id => 1, data => "" ) .
-   # No STDIN
+   # STDIN
+   fcgi_trans( type => 5, id => 1, data => "123456789" ) .
+   # End of STDIN
    fcgi_trans( type => 5, id => 1, data => "" )
 );
 $ready = $set->loop_once( 0.1 );
@@ -51,9 +53,18 @@ ok( defined $req, 'defined $req' );
 is_deeply( $req->params,
            {},
            '$req has empty params hash' );
-is( $req->read_stdin_line,
+is( $req->read_stdin( 4 ),
+    "1234",
+    '$req first four STDIN bytes' );
+is( $req->read_stdin( 4 ),
+    "5678",
+    '$req next four STDIN bytes' );
+is( $req->read_stdin( 4 ),
+    "9",
+    '$req last STDIN bytes' );
+is( $req->read_stdin( 4 ),
     undef,
-    '$req has empty STDIN' );
+    '$req end of STDIN' );
 
 $req->finish;
 

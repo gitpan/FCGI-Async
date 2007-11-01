@@ -39,7 +39,7 @@ the containing C<FCGI::Async> object.
        my ( $fcgi, $req ) = @_;
 
        my $path = $req->param( "PATH_INFO" );
-       $req->print_stdout( "HTTP/1.0 200 OK\r\n" .
+       $req->print_stdout( "Status: 200 OK\r\n" .
                            "Content-type: text/plain\r\n" .
                            "\r\n" .
                            "You requested $path" );
@@ -178,10 +178,10 @@ sub incomingrecord_stdin
 
 =cut
 
-=head2 %p = $req->params
+=head2 $hashref = $req->params
 
-This method returns a copy of the hash of request parameters that had been
-sent by the webserver as part of the request.
+This method returns a reference to a hash containing a copy of the request
+parameters that had been sent by the webserver as part of the request.
 
 =cut
 
@@ -232,6 +232,25 @@ sub read_stdin_line
    else {
       return undef;
    }
+}
+
+=head2 $data = $req->read_stdin( $size )
+
+This method works similarly to the C<read(HANDLE)> function. It returns the
+next block of up to $size bytes from the STDIN buffer. If no data is available
+any more, then C<undef> is returned instead.
+
+=cut
+
+sub read_stdin
+{
+   my $self = shift;
+   my ( $size ) = @_;
+
+   return undef unless length $self->{stdin};
+
+   # If $size is too big, substr() will cope
+   return substr( $self->{stdin}, 0, $size, "" );
 }
 
 sub _print_stream
@@ -287,7 +306,7 @@ sub end_request
    $self->writerecord( { type => FCGI_END_REQUEST, content => $content } );
 }
 
-=head2 $req->finish
+=head2 $req->finish( $exitcode )
 
 When the request has been dealt with, this method should be called to indicate
 to the webserver that it is finished. After calling this method, no more data
@@ -295,11 +314,15 @@ may be appended to the STDOUT stream. At some point after calling this method,
 the request object will be removed from the containing C<FCGI::Async> object,
 once all the buffered outbound data has been sent.
 
+If present, C<$exitcode> should indicate the numeric status code to send to
+the webserver. If absent, a value of C<0> is presumed.
+
 =cut
 
 sub finish
 {
    my $self = shift;
+   my ( $exitcode ) = @_;
 
    # Signal the end of STDOUT
    $self->writerecord( { type => FCGI_STDOUT, content => "" } );
@@ -307,7 +330,7 @@ sub finish
    # Signal the end of STDERR if we used it
    $self->writerecord( { type => FCGI_STDERR, content => "" } ) if $self->{used_stderr};
 
-   $self->end_request( 0, FCGI_REQUEST_COMPLETE );
+   $self->end_request( $exitcode || 0, FCGI_REQUEST_COMPLETE );
 
    my $conn = $self->{conn};
    $conn->_removereq( $self->{reqid} );

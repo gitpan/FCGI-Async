@@ -33,10 +33,14 @@ is( $ready, 1, '$ready after connect' );
 # Got it - now pretend to be an FCGI client, such as how a webserver would
 # behave.
 
+my $paramvalue = "A" x 240; # Important that 240 is bigger than 127
+
 $C->syswrite(
    # Begin
    fcgi_trans( type => 1, id => 1, data => "\0\1\0\0\0\0\0\0" ) .
-   # No parameters
+   # Parameters
+   fcgi_trans( type => 4, id => 1, data => "\4\x80\0\0\xf0LONG$paramvalue" ) .
+   # End of parameters
    fcgi_trans( type => 4, id => 1, data => "" ) .
    # No STDIN
    fcgi_trans( type => 5, id => 1, data => "" )
@@ -49,8 +53,8 @@ my $req = $on_request;
 ok( defined $req, 'defined $req' );
 
 is_deeply( $req->params,
-           {},
-           '$req has empty params hash' );
+           { LONG => $paramvalue },
+           '$req has correct params' );
 is( $req->read_stdin_line,
     undef,
     '$req has empty STDIN' );

@@ -20,7 +20,7 @@ sub on_request
    my %req_env = %{ $req->params };
 
    # Determine these however you like; perhaps examine $req
-   my $handler = "sample.cgi";
+   my $handler = "./sample.cgi";
    my @handler_args = ();
    
    # These following variables are important because we're about to form a
