@@ -89,7 +89,7 @@ sub on_request
    my $childin_notifier = IO::Async::Buffer->new(
       handle => $childin,
 
-      on_incoming_data => sub { }, # Ignore it
+      on_read => sub { }, # Ignore it
 
       on_outgoing_empty => sub {
          my ( $notifier ) = @_;
@@ -104,7 +104,7 @@ sub on_request
    my $did_stdin = 0;
 
    while( defined( my $line = $req->read_stdin_line ) ) {
-      $childin_notifier->send( $line );
+      $childin_notifier->write( $line );
 
       $did_stdin = 1;
    }
@@ -121,7 +121,7 @@ sub on_request
    my $childout_notifier = IO::Async::Buffer->new(
       read_handle => $childout,
 
-      on_incoming_data => sub {
+      on_read => sub {
          my ( $notifier, $buffref, $closed ) = @_;
 
          $req->print_stdout( $$buffref );
@@ -146,7 +146,7 @@ sub on_request
    my $childerr_notifier = IO::Async::Buffer->new(
       read_handle => $childerr,
 
-      on_incoming_data => sub {
+      on_read => sub {
          my ( $notifier, $buffref, $closed ) = @_;
 
          if( $$buffref =~ s{^(.*?)\n}{} ) {

@@ -7,6 +7,7 @@ package FCGI::Async::ClientConnection;
 
 use strict;
 
+use IO::Async::Buffer 0.10;
 use base qw( IO::Async::Buffer );
 
 use FCGI::Async::Constants;
@@ -27,7 +28,7 @@ sub new
 }
 
 # Callback function for IO::Async::Buffer
-sub on_incoming_data
+sub on_read
 {
    my $self = shift;
    my ( $buffref, $handleclosed ) = @_;
@@ -81,14 +82,14 @@ sub on_incoming_data
    return 1;
 }
 
-sub sendrecord
+sub writerecord
 {
    my $self = shift;
    my ( $rec, $content ) = @_;
 
    my $buffer = FCGI::Async::BuildParse::build_record( $rec, $content );
 
-   $self->send( $buffer );
+   $self->write( $buffer );
 }
 
 sub _removereq

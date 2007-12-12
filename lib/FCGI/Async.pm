@@ -21,7 +21,7 @@ FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 our $DEBUG = 0;
 
 =head1 SYNOPSIS

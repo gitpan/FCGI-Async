@@ -16,9 +16,6 @@ FCGI::Async::Request - Class to represent one active FastCGI request
 
 =cut
 
-# The largest we'll try to send() down the network at any one time
-use constant MAXSENDSIZE => 4096;
-
 # The largest amount of data we can fit in a FastCGI record - MUST NOT
 # be greater than 2^16-1
 use constant MAXRECORDDATA => 65535;
@@ -103,7 +100,7 @@ sub writerecord
 
    my $conn = $self->{conn};
 
-   $conn->sendrecord( $rec, $content );
+   $conn->writerecord( $rec, $content );
 
 }
 

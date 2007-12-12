@@ -65,7 +65,7 @@ sub on_request
    my $childout_notifier = IO::Async::Buffer->new(
       read_handle => $childout,
 
-      on_incoming_data => sub {
+      on_read => sub {
          my ( $notifier, $buffref, $closed ) = @_;
 
          if( $$buffref =~ s{^(.*?)\n}{} ) {
@@ -96,7 +96,7 @@ sub on_request
 
    my $childerr_notifier = IO::Async::Buffer->new(
       read_handle => $childerr,
-      on_incoming_data => sub {
+      on_read => sub {
          my ( $notifier, $buffref, $closed ) = @_;
 
          if( $$buffref =~ s{^(.*?)\n}{} ) {
