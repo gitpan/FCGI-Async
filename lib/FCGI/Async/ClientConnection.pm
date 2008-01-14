@@ -7,8 +7,8 @@ package FCGI::Async::ClientConnection;
 
 use strict;
 
-use IO::Async::Buffer 0.10;
-use base qw( IO::Async::Buffer );
+use IO::Async::Stream 0.11;
+use base qw( IO::Async::Stream );
 
 use FCGI::Async::Constants;
 use FCGI::Async::Request;
@@ -27,7 +27,7 @@ sub new
    return $self;
 }
 
-# Callback function for IO::Async::Buffer
+# Callback function for IO::Async::Stream
 sub on_read
 {
    my $self = shift;

@@ -4,7 +4,7 @@ use strict;
 
 use Test::More tests => 9;
 
-use IO::Async::Set::IO_Poll;
+use IO::Async::Loop::IO_Poll;
 
 use FCGI::Async;
 
@@ -24,15 +24,15 @@ my $fcgi = FCGI::Async->new(
    },
 );
 
-my $set = IO::Async::Set::IO_Poll->new();
-$set->add( $fcgi );
+my $loop = IO::Async::Loop::IO_Poll->new();
+$loop->add( $fcgi );
 
 ok( defined $fcgi, 'defined $fcgi' );
 is( ref $fcgi, "FCGI::Async", 'ref $fcgi is FCGI::Async' );
 
 my $C = connect_client_sock( $selfaddr );
 
-my $ready = $set->loop_once( 0.1 );
+my $ready = $loop->loop_once( 0.1 );
 is( $ready, 1, '$ready after connect' );
 
 # Got it - now pretend to be an FCGI client, such as how a webserver would
@@ -54,10 +54,10 @@ $C->syswrite(
    # No STDIN 1
    fcgi_trans( type => 5, id => 1, data => "" )
 );
-$ready = $set->loop_once( 0.1 );
+$ready = $loop->loop_once( 0.1 );
 is( $ready, 1, '$ready after request' );
 
-$ready = $set->loop_once( 0.1 );
+$ready = $loop->loop_once( 0.1 );
 is( $ready, 1, '$ready after ->finish()' );
 
 my $buffer;
@@ -77,10 +77,10 @@ $C->syswrite(
    fcgi_trans( type => 5, id => 2, data => "" )
 );
 
-$ready = $set->loop_once( 0.1 );
+$ready = $loop->loop_once( 0.1 );
 is( $ready, 1, '$ready after request' );
 
-$ready = $set->loop_once( 0.1 );
+$ready = $loop->loop_once( 0.1 );
 is( $ready, 1, '$ready after ->finish()' );
 
 sysread( $C, $buffer, 8192 );

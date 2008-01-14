@@ -1,5 +1,12 @@
 Revision history for FCGI-Async
 
+0.13    CHANGES:
+         * Updated for IO::Async 0.11:
+            + IO::Async::Set is now ::Loop
+            + IO::Async::Buffer is now ::Stream
+            + Use of $loop->watch_child() in examples rather than hand-coded
+              around watching SIGCHLD directly.
+
 0.12    BUGFIXES:
          * Updated to IO::Async::Buffer 0.10 (method/event renames)
 

@@ -10,7 +10,8 @@ my $build = Module::Build->new
    dist_version_from => 'lib/FCGI/Async.pm',
    requires => {
                  'IO::Async::Notifier' => '0.03',
-                 'IO::Async::Buffer'   => '0.10',
+                 'IO::Async::Stream'   => '0.11',
+                 'IO::Async::Loop::IO_Poll' => '0.11',
                },
    build_requires => {
                         'Test::More' => 0,

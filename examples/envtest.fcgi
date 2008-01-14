@@ -3,7 +3,7 @@
 use strict;
 
 use FCGI::Async;
-use IO::Async::Set::IO_Poll;
+use IO::Async::Loop::IO_Poll;
 
 sub on_request
 {
@@ -58,7 +58,7 @@ my $fcgi = FCGI::Async->new(
    on_request => \&on_request,
 );
 
-my $set = IO::Async::Set::IO_Poll->new();
-$set->add( $fcgi );
+my $loop = IO::Async::Loop::IO_Poll->new();
+$loop->add( $fcgi );
 
-$set->loop_forever();
+$loop->loop_forever();

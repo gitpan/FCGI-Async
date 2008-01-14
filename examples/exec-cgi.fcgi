@@ -4,14 +4,14 @@ use strict;
 
 use FCGI::Async;
 
-use IO::Async::Buffer;
+use IO::Async::Stream;
 use IO::Async::SignalProxy;
-use IO::Async::Set::IO_Poll;
+use IO::Async::Loop::IO_Poll;
 
 use IPC::Open3;
 use POSIX qw( WNOHANG );
 
-my %childdeathmap;
+my $loop;
 
 sub on_request
 {
@@ -86,7 +86,7 @@ sub on_request
    };
 
    # Child's STDIN
-   my $childin_notifier = IO::Async::Buffer->new(
+   my $childin_notifier = IO::Async::Stream->new(
       handle => $childin,
 
       on_read => sub { }, # Ignore it
@@ -118,7 +118,7 @@ sub on_request
 
    # Child's STDOUT
 
-   my $childout_notifier = IO::Async::Buffer->new(
+   my $childout_notifier = IO::Async::Stream->new(
       read_handle => $childout,
 
       on_read => sub {
@@ -143,7 +143,7 @@ sub on_request
 
    # Child's STDERR
 
-   my $childerr_notifier = IO::Async::Buffer->new(
+   my $childerr_notifier = IO::Async::Stream->new(
       read_handle => $childerr,
 
       on_read => sub {
@@ -171,32 +171,23 @@ sub on_request
 
    $fcgi->add_child( $childerr_notifier );
 
-   # Child's death via SIGCHLD
+   # Child's death
 
-   $childdeathmap{$kid} = sub {
+   $loop->watch_child( $kid, sub {
       # Mark that condition 3 above is true, and check for finishing
       undef $kid;
       $finishhandler->();
-   };
+   } );
 }
 
 my $fcgi = FCGI::Async->new(
    on_request => \&on_request,
 );
 
-my $set = IO::Async::Set::IO_Poll->new();
-$set->add( $fcgi );
+$loop = IO::Async::Loop::IO_Poll->new();
 
-$set->add( IO::Async::SignalProxy->new(
-   signal_CHLD => sub {
-      while( 1 ) {
-         my $zid = waitpid( -1, WNOHANG );
-         last if !defined $zid or $zid < 1;
+$loop->add( $fcgi );
 
-         $childdeathmap{$zid}->() if defined $childdeathmap{$zid};
-         undef $childdeathmap{$zid};
-      }
-   }
-) );
+$loop->enable_childmanager();
 
-$set->loop_forever();
+$loop->loop_forever();
