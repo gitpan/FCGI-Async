@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 7;
+use Test::More tests => 6;
 
 use IO::Async::Loop::IO_Poll;
 use IO::Async::Test;
@@ -55,11 +55,15 @@ is( $request->read_stdin_line,
     undef,
     '$request has empty STDIN' );
 
+$request->print_stdout( "Hello, " );
+$request->print_stdout( "world." );
 $request->finish;
 
 my $expect;
 
 $expect =
+   # STDOUT
+   fcgi_trans( type => 6, id => 1, data => "Hello, world." ) .
    # End of STDOUT
    fcgi_trans( type => 6, id => 1, data => "" ) .
    # End request
@@ -75,9 +79,3 @@ wait_for {
 };
 
 is( $buffer, $expect, 'FastCGI end request record' );
-
-# Since we didn't specify FCGI_KEEP_CONN, we expect that $C should now be
-# closed, and that reading any more will give us EOF
-
-my $l = $C->sysread( $buffer, 8192 );
-is( $l, 0, 'Client connection now closed' );

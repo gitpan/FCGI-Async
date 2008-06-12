@@ -2,33 +2,35 @@
 
 use strict;
 
-use Test::More tests => 12;
+use Test::More tests => 9;
 
 use IO::Async::Loop::IO_Poll;
+use IO::Async::Test;
+
+use POSIX qw( EAGAIN );
 
 use FCGI::Async;
 
 use t::lib::TestFCGI;
 
-my $on_request;
+my $request;
 
 my ( $S, $selfaddr ) = make_server_sock;
 
-my $fcgi = FCGI::Async->new(
-   'socket' => $S,
-   on_request => sub { $on_request = $_[1] },
-);
-
 my $loop = IO::Async::Loop::IO_Poll->new();
-$loop->add( $fcgi );
+testing_loop( $loop );
+
+my $fcgi = FCGI::Async->new(
+   loop => $loop,
+
+   handle => $S,
+   on_request => sub { $request = $_[1] },
+);
 
 ok( defined $fcgi, 'defined $fcgi' );
 is( ref $fcgi, "FCGI::Async", 'ref $fcgi is FCGI::Async' );
 
 my $C = connect_client_sock( $selfaddr );
-
-my $ready = $loop->loop_once( 0.1 );
-is( $ready, 1, '$ready after connect' );
 
 # Got it - now pretend to be an FCGI client, such as how a webserver would
 # behave.
@@ -47,48 +49,52 @@ $C->syswrite(
    # End of STDIN
    fcgi_trans( type => 5, id => 1, data => "" )
 );
-$ready = $loop->loop_once( 0.1 );
-is( $ready, 1, '$ready after request' );
 
-my $req = $on_request;
+wait_for { defined $request };
 
-ok( defined $req, 'defined $req' );
+ok( $request->isa( 'FCGI::Async::Request' ), '$request isa FCGI::Async::Request' );
 
-is_deeply( $req->params,
+is_deeply( $request->params,
            { FOO => 'foo', SPLOT => 'splot' },
-           '$req has correct params' );
-is( $req->read_stdin_line,
+           '$request has correct params' );
+is( $request->read_stdin_line,
     "Hello, FastCGI script\r\n",
-    '$req has correct STDIN line 1' );
-is( $req->read_stdin_line,
+    '$request has correct STDIN line 1' );
+is( $request->read_stdin_line,
     "Here are several lines of data\r\n",
-    '$req has correct STDIN line 2' );
-is( $req->read_stdin_line,
+    '$request has correct STDIN line 2' );
+is( $request->read_stdin_line,
     "They should appear on STDIN\r\n",
-    '$req has correct STDIN line 3' );
-is( $req->read_stdin_line,
+    '$request has correct STDIN line 3' );
+is( $request->read_stdin_line,
     undef,
-    '$req has correct STDIN finish' );
+    '$request has correct STDIN finish' );
 
-$req->print_stdout( "Hello, world!" );
-$req->print_stderr( "Some errors occured\n" );
-$req->finish( 5 );
+$request->print_stdout( "Hello, world!" );
+$request->print_stderr( "Some errors occured\n" );
+$request->finish( 5 );
 
-$ready = $loop->loop_once( 0.1 );
-is( $ready, 1, '$ready after ->finish()' );
+my $expect;
+
+$expect =
+   # STDOUT
+   fcgi_trans( type => 6, id => 1, data => "Hello, world!" ) .
+   # STDERR
+   fcgi_trans( type => 7, id => 1, data => "Some errors occured\n" ) .
+   # End of STDOUT
+   fcgi_trans( type => 6, id => 1, data => "" ) .
+   # End of STDERR
+   fcgi_trans( type => 7, id => 1, data => "" ) .
+   # End request
+   fcgi_trans( type => 3, id => 1, data => "\0\0\0\5\0\0\0\0" );
 
 my $buffer;
-sysread( $C, $buffer, 8192 );
 
-is( $buffer,
-    # STDOUT
-    fcgi_trans( type => 6, id => 1, data => "Hello, world!" ) .
-    # STDERR
-    fcgi_trans( type => 7, id => 1, data => "Some errors occured\n" ) .
-    # End of STDOUT
-    fcgi_trans( type => 6, id => 1, data => "" ) .
-    # End of STDERR
-    fcgi_trans( type => 7, id => 1, data => "" ) .
-    # End request
-    fcgi_trans( type => 3, id => 1, data => "\0\0\0\5\0\0\0\0" ),
-    'FastCGI end request record' );
+$buffer = "";
+
+wait_for {
+   $C->sysread( $buffer, 8192, length $buffer ) or $! == EAGAIN or die "Cannot sysread - $!";
+   return ( length $buffer >= length $expect );
+};
+
+is( $buffer, $expect, 'FastCGI end request record' );

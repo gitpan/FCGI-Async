@@ -1,7 +1,7 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2007 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2008 -- leonerd@leonerd.org.uk
 
 package FCGI::Async::ClientConnection;
 
@@ -82,6 +82,30 @@ sub on_read
    return 1;
 }
 
+sub on_write_ready
+{
+   my $self = shift;
+
+   foreach my $req ( values %{ $self->{reqs} } ) {
+      $req->_flush_streams;
+   }
+
+   $self->SUPER::on_write_ready( @_ );
+}
+
+sub on_outgoing_empty
+{
+   my $self = shift;
+
+   my $want_writeready = 0;
+
+   foreach my $req ( values %{ $self->{reqs} } ) {
+      $want_writeready = 1 if $req->_want_writeready;
+   }
+
+   $self->want_writeready( $want_writeready );
+}
+
 sub writerecord
 {
    my $self = shift;
@@ -97,7 +121,7 @@ sub _removereq
    my $self = shift;
    my ( $reqid ) = @_;
 
-   undef $self->{reqs}->{$reqid};
+   delete $self->{reqs}->{$reqid};
 }
 
 # Keep perl happy; keep Britain tidy

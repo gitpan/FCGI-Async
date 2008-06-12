@@ -62,7 +62,11 @@ sub connect_client_sock
       Type     => SOCK_STREAM,
    );
    defined $C or die "Unable to create client socket - $!";
+
+   # Normal blocking connect so we can be sure it's done
    $C->connect( $selfaddr ) or die "Unable to connect socket - $!";
+
+   $C->blocking(0);
 
    return $C;
 }

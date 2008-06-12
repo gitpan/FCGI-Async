@@ -22,4 +22,6 @@ t/04request-reuse.t
 t/05request-multiplex.t
 t/06request-binary.t
 t/07request-longparams.t
+t/08request-shortwrites.t
+t/09request-streamstdout.t
 t/lib/TestFCGI.pm

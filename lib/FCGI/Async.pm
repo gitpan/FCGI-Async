@@ -1,12 +1,14 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2007 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2008 -- leonerd@leonerd.org.uk
 
 package FCGI::Async;
 
 use warnings;
 use strict;
+
+use Carp;
 
 use base qw( IO::Async::Notifier );
 
@@ -21,19 +23,25 @@ FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.13';
-our $DEBUG = 0;
+our $VERSION = '0.14';
 
 =head1 SYNOPSIS
+
+B<NOTE>: The constructor API of this module has changed since version 0.13!
 
 This module allows a program to respond to FastCGI requests using an
 asynchronous model. It is based on L<IO::Async> and will fully interact with
 any program using this base.
 
  use FCGI::Async;
- use IO::Async::Set::IO_Poll;
+ use IO::Async::Loop::IO_Poll;
+
+ my $loop = IO::Async::Loop::IO_Poll->new();
 
  my $fcgi = FCGI::Async->new(
+    loop => $loop,
+    service => 1234,
+
     on_request => sub {
        my ( $fcgi, $req ) = @_;
 
@@ -41,71 +49,61 @@ any program using this base.
     }
  );
 
- my $set = IO::Async::Set::IO_Poll->new();
+ $loop->loop_forever;
 
- $set->add( $fcgi );
+Or
 
- $set->loop_forever;
+ my $fcgi = FCGI::Async->new(
+    on_request => ...
+ );
+
+ my $loop = ...
+
+ $loop->add( $fcgi );
+
+ $fcgi->listen( service => 1234 );
 
 =cut
     
-=head1 FUNCTIONS
+=head1 CONSTRUCTOR
 
 =cut
 
 =head2 $fcgi = FCGI::Async->new( %args )
 
-This function returns a new instance of a C<FCGI::Async> object, containing
-a master socket to listen on. The constructor returns immediately; it does not
-make any blocking calls.
+This function returns a new instance of a C<FCGI::Async> object.
 
-The function operates in one of three ways, depending on arguments 
-passed in the C<%args> hash:
+The C<%args> hash must contain the following:
 
 =over 4
 
-=item *
+=item on_request => CODE
 
-Listening on an existing socket.
+Reference to a handler to call when a new FastCGI request is received.
+It will be invoked as
 
- socket => $socket
+ $on_request->( $fcgi, $request )
 
-This must be a socket opened in listening mode, derived from C<IO::Socket>, or
-any other class that handles the C<fileno> and C<accept> methods in a similar
-way.
-
-=item *
-
-Creating a new listening socket.
-
- port => $port
-
-A new C<IO::Socket::INET> socket will be opened on the given port number. It
-will listen on all interfaces, from all addresses.
-
-=item *
-
-Using the socket passed as STDIN from a webserver.
-
-When running a local FastCGI responder, the webserver will create a new INET
-socket connected to the script's STDIN file handle. To use the socket in this
-case, pass neither of the above options.
+where C<$request> will be a new L<FCGI::Async::Request> object.
 
 =back
 
-The C<%args> hash must also contain a CODE reference to a callback function to
-call when a new FastCGI request arrives
+If either a C<handle> or C<service> argument are passed to the constructor,
+then the newly-created object is added to the given C<IO::Async::Loop>, then
+the C<listen> method is invoked, passing the entire C<%args> hash to it. For
+more detail, see the C<listen> method below.
 
- on_request => sub { ... }
+If of the above arguments are given, then a C<IO::Async::Loop> must also be
+provided:
 
-or
+=over 4
 
- on_request => \&handler
+=item loop => IO::Async::Loop
 
-This will be passed two parameters; the C<FCGI::Async> container object, and a
-new C<FCGI::Async::Request> object representing the specific request.
+A reference to the C<IO::Async::Loop> which will contain the listening
+sockets.
 
- $on_request->( $fcgi, $request )
+=back
 
 =cut
 
@@ -114,48 +112,99 @@ sub new
    my $class = shift;
    my ( %args ) = @_;
 
-   my $socket;
+   my $self = $class->SUPER::new();
 
    if( $args{socket} ) {
-      $socket = $args{socket};
+      carp "'socket' is now deprecated; use 'handle' instead";
+      $args{handle} = delete $args{socket};
    }
-   elsif( $args{port} ) {
-      $socket = IO::Socket::INET->new(
-         Type      => SOCK_STREAM,
-         LocalPort => $args{port},
-         Listen    => 10,
-         ReuseAddr => 1,
-         Blocking  => 0,
+
+   if( $args{port} ) {
+      carp "'port' is now deprecated; use 'service' instead";
+      $args{service} = delete $args{port};
+   }
+
+   if( defined $args{handle} or defined $args{service} ) {
+      my $loop = $args{loop} or croak "Require a 'loop' argument";
+
+      $loop->add( $self );
+
+      $self->listen(
+         %args,
+
+         # listen wants some error handling callbacks. Since this is a
+         # constructor it's reasonable to provide default 'croak' ones if
+         # they're not supplied
+         on_resolve_error => sub { croak "Resolve error $_[0] while constructing a " . __PACKAGE__ },
+         on_listen_error  => sub { croak "Cannot listen while constructing a " . __PACKAGE__ },
       );
    }
-   else {
-      $socket = \*STDIN;
-
-      # Rebless it into the IO::Socket::INET space so we can call ->accept()
-      # on it
-      # TODO - ensure it really is an INET socket first
-      $socket = bless $socket, "IO::Socket::INET";
-   }
-
-   my $self = $class->SUPER::new( read_handle => $socket );
-
-   warn "You no longer have to supply a 'set' argument to FCGI::Async->new() - it has been ignored"
-      if exists $args{set};
 
    $self->{on_request} = $args{on_request};
 
    return $self;
 }
 
-sub on_read_ready
+=head1 METHODS
+
+=cut
+
+=head2 $fcgi->listen( %args )
+
+Start listening for connections on a socket, creating it first if necessary.
+
+This method may be called in either of the following ways. To listen on an
+existing socket filehandle:
+
+=over 4
+
+=item handle => IO
+
+An IO handle referring to a listen-mode socket.
+
+=back
+
+Or, to create the listening socket or sockets:
+
+=over 4
+
+=item service => STRING
+
+Port number or service name to listen on.
+
+=item host => STRING
+
+Optional. If supplied, the hostname will be resolved into a set of addresses,
+and one listening socket will be created for each address. If not, then all
+available addresses will be used.
+
+=back
+
+This method may also require C<on_listen_error> or C<on_resolve_error>
+callbacks for error handling - see L<IO::Async::Listener> for more detail.
+
+=cut
+
+# TODO: Most of this needs to be moved into an abstract Net::Async::Server role
+sub listen
 {
    my $self = shift;
+   my %args = @_;
 
-   my $newS = $self->read_handle->accept() or die "Cannot accept() - $!";
+   my $loop = $self->get_loop or croak "Cannot listen without a Loop";
 
-   my $newreq = FCGI::Async::ClientConnection->new( $newS, $self );
+   $loop->listen(
+      socktype => SOCK_STREAM,
+      %args,
 
-   $self->add_child( $newreq );
+      on_accept => sub {
+         my ( $newS ) = @_;
+
+         my $newreq = FCGI::Async::ClientConnection->new( $newS, $self );
+
+         $self->add_child( $newreq );
+      }
+   );
 }
 
 sub _request_ready
@@ -170,6 +219,12 @@ sub _request_ready
 1;
 
 __END__
+
+=head1 Using a socket on STDIN
+
+When running a local FastCGI responder, the webserver will create a new INET
+socket connected to the script's STDIN file handle. To use the socket in this
+case, it should be passed as the 'socket'
 
 =head1 SEE ALSO
 
@@ -189,8 +244,8 @@ Interface Specification
 
 L<http://www.fastcgi.com/devkit/doc/fcgi-spec.html> - FastCGI Specification
 
+=back
+
 =head1 AUTHOR
 
 Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>
-
-=back

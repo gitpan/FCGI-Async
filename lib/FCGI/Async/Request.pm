@@ -1,7 +1,7 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2007 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2008 -- leonerd@leonerd.org.uk
 
 package FCGI::Async::Request;
 
@@ -29,7 +29,7 @@ rather, objects in this class are passed into the C<on_request> callback of
 the containing C<FCGI::Async> object.
 
  use FCGI::Async;
- use IO::Async::Set::IO_Poll;
+ use IO::Async::Loop::IO_Poll;
 
  my $fcgi = FCGI::Async->new(
     on_request => sub {
@@ -44,11 +44,28 @@ the containing C<FCGI::Async> object.
     }
  );
 
- my $set = IO::Async::Set::IO_Poll->new();
+ my $loop = IO::Async::Loop::IO_Poll->new();
 
- $set->add( $fcgi );
+ $loop->add( $fcgi );
 
- $set->loop_forever;
+ $loop->loop_forever;
+
+To serve contents of files on disk, it may be more efficient to use
+C<stream_stdout_then_finish>:
+
+    on_request => sub {
+       my ( $fcgi, $req ) = @_;
+
+       open( my $file, "<", "/path/to/file" );
+       $req->print_stdout( "Status: 200 OK\r\n" .
+                           "Content-type: application/octet-stream\r\n" .
+                           "\r\n" );
+
+       $req->stream_stdout_then_finish(
+          sub { read( $file, my $buffer, 8192 ) or return undef; return $buffer },
+          0
+       );
+    }
 
 =cut
 
@@ -77,6 +94,9 @@ sub new
       stdindone  => 0,
       params     => {},
       paramsdone => 0,
+
+      stdout     => "",
+      stderr     => "",
 
       used_stderr => 0,
    }, $class;
@@ -235,7 +255,8 @@ sub read_stdin_line
 
 This method works similarly to the C<read(HANDLE)> function. It returns the
 next block of up to $size bytes from the STDIN buffer. If no data is available
-any more, then C<undef> is returned instead.
+any more, then C<undef> is returned instead. If $size is not defined, then it
+will return all the available data.
 
 =cut
 
@@ -245,6 +266,8 @@ sub read_stdin
    my ( $size ) = @_;
 
    return undef unless length $self->{stdin};
+
+   $size = length $self->{stdin} unless defined $size;
 
    # If $size is too big, substr() will cope
    return substr( $self->{stdin}, 0, $size, "" );
@@ -262,6 +285,30 @@ sub _print_stream
    }
 }
 
+sub _flush_streams
+{
+   my $self = shift;
+
+   if( length $self->{stdout} ) {
+      $self->_print_stream( $self->{stdout}, FCGI_STDOUT );
+      $self->{stdout} = "";
+   }
+   elsif( my $cb = $self->{stdout_cb} ) {
+      $cb->();
+   }
+
+   if( length $self->{stderr} ) {
+      $self->_print_stream( $self->{stderr}, FCGI_STDERR );
+      $self->{stderr} = "";
+   }
+}
+
+sub _want_writeready
+{
+   my $self = shift;
+   return defined $self->{stdout_cb};
+}
+
 =head2 $req->print_stdout( $data )
 
 This method appends the given data to the STDOUT stream of the FastCGI
@@ -274,7 +321,10 @@ sub print_stdout
    my $self = shift;
    my ( $data ) = @_;
 
-   $self->_print_stream( $data, FCGI_STDOUT );
+   $self->{stdout} .= $data;
+
+   my $conn = $self->{conn};
+   $conn->want_writeready( 1 );
 }
 
 =head2 $req->print_stderr( $data )
@@ -290,7 +340,46 @@ sub print_stderr
    my ( $data ) = @_;
 
    $self->{used_stderr} = 1;
-   $self->_print_stream( $data, FCGI_STDERR );
+   $self->{stderr} .= $data;
+
+   my $conn = $self->{conn};
+   $conn->want_writeready( 1 );
+}
+
+=head2 $req->stream_stdout_then_finish( $readfn, $exitcode )
+
+This method installs a callback for streaming data to the STDOUT stream.
+Whenever the output stream is otherwise-idle, the function will be called to
+generate some more data to output. When this function returns C<undef> it
+indicates the end of the stream, and the request will be finished with the
+given exit code.
+
+If this method is used, then care should be taken to ensure that the number of
+bytes written to the server matches the number that was claimed in the
+C<Content-Length>, if such was provided. This logic should be performed by the
+containing application; C<FCGI::Async> will not track it.
+
+=cut
+
+sub stream_stdout_then_finish
+{
+   my $self = shift;
+   my ( $readfn, $exitcode ) = @_;
+
+   $self->{stdout_cb} = sub {
+      my $data = $readfn->();
+
+      if( defined $data ) {
+         $self->print_stdout( $data );
+      }
+      else {
+         delete $self->{stdout_cb};
+         $self->finish( $exitcode );
+      }
+   };
+
+   my $conn = $self->{conn};
+   $conn->want_writeready( 1 );
 }
 
 sub end_request
@@ -321,6 +410,8 @@ sub finish
    my $self = shift;
    my ( $exitcode ) = @_;
 
+   $self->_flush_streams;
+
    # Signal the end of STDOUT
    $self->writerecord( { type => FCGI_STDOUT, content => "" } );
 
@@ -330,7 +421,13 @@ sub finish
    $self->end_request( $exitcode || 0, FCGI_REQUEST_COMPLETE );
 
    my $conn = $self->{conn};
-   $conn->_removereq( $self->{reqid} );
+
+   if( $self->{keepconn} ) {
+      $conn->_removereq( $self->{reqid} );
+   }
+   else {
+      $conn->close;
+   }
 }
 
 # Keep perl happy; keep Britain tidy

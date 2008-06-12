@@ -1,5 +1,15 @@
 Revision history for FCGI-Async
 
+0.14    CHANGES:
+         * Reworked constructor to use IO::Async::Loop->listen(). Allows
+           specifying a specific hostname.
+         * Added Request->stream_stdout_then_finish().
+         * Combine small stream writes into larger ones, to gain overhead
+           efficiences over the TCP socket.
+
+        BUGFIXES:
+         * Respect the FCGI_KEEP_CONN flag to close connections if required
+
 0.13    CHANGES:
          * Updated for IO::Async 0.11:
             + IO::Async::Set is now ::Loop
