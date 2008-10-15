@@ -3,7 +3,9 @@
 use strict;
 
 use FCGI::Async;
-use IO::Async::Loop::IO_Poll;
+use IO::Async::Loop;
+
+my $loop = IO::Async::Loop->new();
 
 sub on_request
 {
@@ -39,10 +41,8 @@ EOF
 }
 
 my $fcgi = FCGI::Async->new(
+   loop => $loop,
    on_request => \&on_request,
 );
-
-my $loop = IO::Async::Loop::IO_Poll->new();
-$loop->add( $fcgi );
 
 $loop->loop_forever();

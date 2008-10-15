@@ -29,7 +29,7 @@ rather, objects in this class are passed into the C<on_request> callback of
 the containing C<FCGI::Async> object.
 
  use FCGI::Async;
- use IO::Async::Loop::IO_Poll;
+ use IO::Async::Loop;
 
  my $fcgi = FCGI::Async->new(
     on_request => sub {
@@ -44,7 +44,7 @@ the containing C<FCGI::Async> object.
     }
  );
 
- my $loop = IO::Async::Loop::IO_Poll->new();
+ my $loop = IO::Async::Loop->new();
 
  $loop->add( $fcgi );
 
@@ -108,6 +108,8 @@ sub writerecord
 {
    my $self = shift;
    my ( $rec ) = @_;
+
+   return if $self->is_aborted;
 
    my $content = $rec->{content};
    my $contentlen = length( $content );
@@ -191,7 +193,7 @@ sub incomingrecord_stdin
    $self->_ready_check;
 }
 
-=head1 FUNCTIONS
+=head1 METHODS
 
 =cut
 
@@ -387,6 +389,8 @@ sub end_request
    my $self = shift;
    my ( $status, $protstatus ) = @_;
 
+   return if $self->is_aborted;
+
    my $content = pack( "Ncccc", $status, $protstatus, 0, 0, 0 );
 
    $self->writerecord( { type => FCGI_END_REQUEST, content => $content } );
@@ -410,6 +414,8 @@ sub finish
    my $self = shift;
    my ( $exitcode ) = @_;
 
+   return if $self->is_aborted;
+
    $self->_flush_streams;
 
    # Signal the end of STDOUT
@@ -430,5 +436,40 @@ sub finish
    }
 }
 
+sub _abort
+{
+   my $self = shift;
+   $self->{aborted} = 1;
+
+   my $conn = $self->{conn};
+   $conn->_removereq( $self->{reqid} );
+
+   delete $self->{stdout_cb};
+}
+
+=head2 $req->is_aborted
+
+Returns true if the webserver has already closed the control connection. No
+further work on this request is necessary, as it will be discarded.
+
+It is not required to call this method; if the request is aborted then any
+output will be discarded. It may however be useful to call just before
+expensive operations, in case effort can be avoided if it would otherwise be
+wasted.
+
+=cut
+
+sub is_aborted
+{
+   my $self = shift;
+   return $self->{aborted};
+}
+
 # Keep perl happy; keep Britain tidy
 1;
+
+__END__
+
+=head1 AUTHOR
+
+Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>

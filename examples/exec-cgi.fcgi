@@ -6,12 +6,12 @@ use FCGI::Async;
 
 use IO::Async::Stream;
 use IO::Async::SignalProxy;
-use IO::Async::Loop::IO_Poll;
+use IO::Async::Loop;
 
 use IPC::Open3;
 use POSIX qw( WNOHANG );
 
-my $loop;
+my $loop = IO::Async::Loop->new();
 
 sub on_request
 {
@@ -181,13 +181,8 @@ sub on_request
 }
 
 my $fcgi = FCGI::Async->new(
+   loop => $loop,
    on_request => \&on_request,
 );
-
-$loop = IO::Async::Loop::IO_Poll->new();
-
-$loop->add( $fcgi );
-
-$loop->enable_childmanager();
 
 $loop->loop_forever();

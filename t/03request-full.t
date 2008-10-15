@@ -4,7 +4,7 @@ use strict;
 
 use Test::More tests => 9;
 
-use IO::Async::Loop::IO_Poll;
+use IO::Async::Loop;
 use IO::Async::Test;
 
 use POSIX qw( EAGAIN );
@@ -17,7 +17,7 @@ my $request;
 
 my ( $S, $selfaddr ) = make_server_sock;
 
-my $loop = IO::Async::Loop::IO_Poll->new();
+my $loop = IO::Async::Loop->new();
 testing_loop( $loop );
 
 my $fcgi = FCGI::Async->new(
@@ -52,7 +52,7 @@ $C->syswrite(
 
 wait_for { defined $request };
 
-ok( $request->isa( 'FCGI::Async::Request' ), '$request isa FCGI::Async::Request' );
+isa_ok( $request, 'FCGI::Async::Request', '$request isa FCGI::Async::Request' );
 
 is_deeply( $request->params,
            { FOO => 'foo', SPLOT => 'splot' },

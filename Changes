@@ -1,5 +1,9 @@
 Revision history for FCGI-Async
 
+0.15    BUGFIXES:
+         * Correctly handle webserver-aborted requests - silently discard
+           output.
+
 0.14    CHANGES:
          * Reworked constructor to use IO::Async::Loop->listen(). Allows
            specifying a specific hostname.

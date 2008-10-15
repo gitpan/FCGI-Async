@@ -55,29 +55,18 @@ is( $request->read_stdin_line,
     undef,
     '$request has empty STDIN' );
 
+$request->print_stdout( "Hello, world!" );
+
+# Client goes away before we finish
+close $C;
+
+wait_for { $request->is_aborted };
+
+is( $request->is_aborted, 1, 'Request is aborted' );
+
 $request->finish;
 
-my $expect;
+$loop->loop_once( 0 );
 
-$expect =
-   # End of STDOUT
-   fcgi_trans( type => 6, id => 1, data => "" ) .
-   # End request
-   fcgi_trans( type => 3, id => 1, data => "\0\0\0\0\0\0\0\0" );
-
-my $buffer;
-
-$buffer = "";
-
-wait_for {
-   $C->sysread( $buffer, 8192, length $buffer ) or $! == EAGAIN or die "Cannot sysread - $!";
-   return ( length $buffer >= length $expect );
-};
-
-is( $buffer, $expect, 'FastCGI end request record' );
-
-# Since we didn't specify FCGI_KEEP_CONN, we expect that $C should now be
-# closed, and that reading any more will give us EOF
-
-my $l = $C->sysread( $buffer, 8192 );
-is( $l, 0, 'Client connection now closed' );
+# If we're still alive here then the code didn't die. Good.
+ok( 1, 'Still alive after $request->finish' );

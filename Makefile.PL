@@ -5,7 +5,7 @@ WriteMakefile
           'NAME' => 'FCGI::Async',
           'VERSION_FROM' => 'lib/FCGI/Async.pm',
           'PREREQ_PM' => {
-                           'IO::Async::Loop::IO_Poll' => '0.15',
+                           'IO::Async::Loop' => '0.16',
                            'IO::Async::Test' => 0,
                            'Test::More' => 0
                          },

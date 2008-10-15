@@ -18,7 +18,13 @@ sub new
    my $class = shift;
    my ( $sock, $fcgi ) = @_;
 
-   my $self = $class->SUPER::new( handle => $sock );
+   my $self = $class->SUPER::new(
+      handle => $sock,
+      on_closed => sub {
+         my ( $self ) = @_;
+         $_->_abort for values %{ $self->{reqs} };
+      },
+   );
 
    $self->{fcgi} = $fcgi;
 

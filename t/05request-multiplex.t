@@ -4,7 +4,7 @@ use strict;
 
 use Test::More tests => 4;
 
-use IO::Async::Loop::IO_Poll;
+use IO::Async::Loop;
 use IO::Async::Test;
 
 use POSIX qw( EAGAIN );
@@ -15,7 +15,7 @@ use t::lib::TestFCGI;
 
 my ( $S, $selfaddr ) = make_server_sock;
 
-my $loop = IO::Async::Loop::IO_Poll->new();
+my $loop = IO::Async::Loop->new();
 testing_loop( $loop );
 
 my $fcgi = FCGI::Async->new(

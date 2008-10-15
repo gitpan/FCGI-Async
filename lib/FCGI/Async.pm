@@ -23,7 +23,7 @@ FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 
 =head1 SYNOPSIS
 
@@ -34,9 +34,9 @@ asynchronous model. It is based on L<IO::Async> and will fully interact with
 any program using this base.
 
  use FCGI::Async;
- use IO::Async::Loop::IO_Poll;
+ use IO::Async::Loop;
 
- my $loop = IO::Async::Loop::IO_Poll->new();
+ my $loop = IO::Async::Loop->new();
 
  my $fcgi = FCGI::Async->new(
     loop => $loop,
