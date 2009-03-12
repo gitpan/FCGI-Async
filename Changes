@@ -1,5 +1,10 @@
 Revision history for FCGI-Async
 
+0.16    BUGFIXES:
+         * Support FCGI_GET_VALUES 
+           (closes http://rt.cpan.org/Ticket/Display.html?id=43976)
+         * Use Test::HexString and wait_for_stream() during testing
+
 0.15    BUGFIXES:
          * Correctly handle webserver-aborted requests - silently discard
            output.

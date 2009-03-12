@@ -5,7 +5,6 @@ examples/exec-cgi.fcgi
 examples/fortune.fcgi
 examples/mintest.fcgi
 examples/sample.cgi
-fcgi-spec.html
 lib/FCGI/Async.pm
 lib/FCGI/Async/BuildParse.pm
 lib/FCGI/Async/ClientConnection.pm
@@ -25,4 +24,5 @@ t/07request-longparams.t
 t/08request-shortwrites.t
 t/09request-streamstdout.t
 t/10request-close.t
+t/20get_values.t
 t/lib/TestFCGI.pm

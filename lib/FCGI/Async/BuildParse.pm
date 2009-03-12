@@ -38,6 +38,36 @@ sub parse_record_header
    return \%rec;
 }
 
+sub build_namevalue
+{
+   my ( $name, $value ) = @_;
+
+   my $namelen = length $name;
+   my $valuelen = length $value;
+
+   my $ret = "";
+
+   if( $namelen > 0x7f ) {
+      $ret .= pack( "N", $namelen | 0x80000000 );
+   }
+   else {
+      $ret .= pack( "C", $namelen );
+   }
+
+   if( $valuelen > 0x7f ) {
+      $ret .= pack( "N", $valuelen | 0x80000000 );
+   }
+   else {
+      $ret .= pack( "C", $valuelen );
+   }
+
+   $ret .= $name;
+
+   $ret .= $value;
+
+   return $ret;
+}
+
 sub parse_namevalue
 {
    # THIS FUNCTION MODIFIES $_[0]

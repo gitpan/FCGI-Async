@@ -17,13 +17,19 @@ use FCGI::Async::Constants;
 
 use IO::Socket::INET;
 
+# The FCGI_GET_VALUES request might ask for our maximally supported number of
+# concurrent connections or requests. We don't really have an inbuilt maximum,
+# so just respond these large numbers
+our $MAX_CONNS = 1024;
+our $MAX_REQS  = 1024;
+
 =head1 NAME
 
 FCGI::Async - Module to allow use of FastCGI asynchronously
 
 =cut
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 =head1 SYNOPSIS
 
@@ -219,6 +225,21 @@ sub _request_ready
 1;
 
 __END__
+
+=head1 Limits in FCGI_GET_VALUES
+
+The C<FCGI_GET_VALUES> FastCGI request can enquire of the responder the
+maximum number of connections or requests it can support. Because this module
+puts no fundamental limit on these values, it will return some arbitrary
+numbers. These are given in package variables:
+
+ $FCGI::Async::MAX_CONNS = 1024;
+ $FCGI::Async::MAX_REQS  = 1024;
+
+These variables are provided in case the containing application wishes to make
+the library return different values in the request. These values are not
+actually used by the library, other than to fill in the values in response of
+C<FCGI_GET_VALUES>.
 
 =head1 Using a socket on STDIN
 

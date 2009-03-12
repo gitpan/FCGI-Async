@@ -2,12 +2,11 @@
 
 use strict;
 
-use Test::More tests => 4;
+use Test::More tests => 2;
+use Test::HexString;
 
 use IO::Async::Loop;
 use IO::Async::Test;
-
-use POSIX qw( EAGAIN );
 
 use FCGI::Async;
 
@@ -31,9 +30,6 @@ my $fcgi = FCGI::Async->new(
       $req->finish;
    },
 );
-
-ok( defined $fcgi, 'defined $fcgi' );
-is( ref $fcgi, "FCGI::Async", 'ref $fcgi is FCGI::Async' );
 
 my $C = connect_client_sock( $selfaddr );
 
@@ -71,12 +67,9 @@ my $buffer;
 
 $buffer = "";
 
-wait_for {
-   $C->sysread( $buffer, 8192, length $buffer ) or $! == EAGAIN or die "Cannot sysread - $!";
-   return ( length $buffer >= length $expect );
-};
+wait_for_stream { length $buffer >= length $expect } $C => $buffer;
 
-is( $buffer, $expect, 'FastCGI end request record' );
+is_hexstr( $buffer, $expect, 'FastCGI end request record' );
 
 $C->syswrite(
    # No STDIN 2
@@ -93,9 +86,6 @@ $expect =
 
 $buffer = "";
 
-wait_for {
-   $C->sysread( $buffer, 8192, length $buffer ) or $! == EAGAIN or die "Cannot sysread - $!";
-   return ( length $buffer >= length $expect );
-};
+wait_for_stream { length $buffer >= length $expect } $C => $buffer;
 
-is( $buffer, $expect, 'FastCGI end request record' );
+is_hexstr( $buffer, $expect, 'FastCGI end request record' );

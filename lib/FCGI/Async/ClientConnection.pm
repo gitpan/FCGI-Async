@@ -75,6 +75,10 @@ sub on_read
       $self->{reqs}->{$reqid} = $req;
       return 1;
    }
+   elsif( $type == FCGI_GET_VALUES ) {
+      $self->_get_values( $rec );
+      return 1;
+   }
 
    my $req = $self->{reqs}->{$reqid};
 
@@ -128,6 +132,49 @@ sub _removereq
    my ( $reqid ) = @_;
 
    delete $self->{reqs}->{$reqid};
+}
+
+sub _get_values
+{
+   my $self = shift;
+   my ( $rec ) = @_;
+
+   my $content = $rec->{content};
+
+   my $ret = "";
+
+   while( length $content ) {
+      my ( $name ) = FCGI::Async::BuildParse::parse_namevalue( $content );
+
+      my $value = $self->_get_value( $name );
+      if( defined $value ) {
+         $ret .= FCGI::Async::BuildParse::build_namevalue( $name, $value );
+      }
+   }
+
+   if( length $ret ) {
+      $self->writerecord(
+         {
+            type  => FCGI_GET_VALUES_RESULT,
+            reqid => 0,
+         },
+         $ret
+      );
+   }
+}
+
+# This is a method so subclasses could hook extra values if they want
+sub _get_value
+{
+   my $self = shift;
+   my ( $name ) = @_;
+
+   return 1 if $name eq "FCGI_MPXS_CONNS";
+
+   return $FCGI::Async::MAX_CONNS if $name eq "FCGI_MAX_CONNS";
+   return $FCGI::Async::MAX_REQS  if $name eq "FCGI_MAX_REQS";
+
+   return undef;
 }
 
 # Keep perl happy; keep Britain tidy

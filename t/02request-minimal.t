@@ -3,11 +3,10 @@
 use strict;
 
 use Test::More tests => 7;
+use Test::HexString;
 
 use IO::Async::Loop;
 use IO::Async::Test;
-
-use POSIX qw( EAGAIN );
 
 use FCGI::Async;
 
@@ -28,7 +27,7 @@ my $fcgi = FCGI::Async->new(
 );
 
 ok( defined $fcgi, 'defined $fcgi' );
-is( ref $fcgi, "FCGI::Async", 'ref $fcgi is FCGI::Async' );
+isa_ok( $fcgi, "FCGI::Async", '$fcgi isa FCGI::Async' );
 
 my $C = connect_client_sock( $selfaddr );
 
@@ -69,12 +68,9 @@ my $buffer;
 
 $buffer = "";
 
-wait_for {
-   $C->sysread( $buffer, 8192, length $buffer ) or $! == EAGAIN or die "Cannot sysread - $!";
-   return ( length $buffer >= length $expect );
-};
+wait_for_stream { length $buffer >= length $expect } $C => $buffer;
 
-is( $buffer, $expect, 'FastCGI end request record' );
+is_hexstr( $buffer, $expect, 'FastCGI end request record' );
 
 # Since we didn't specify FCGI_KEEP_CONN, we expect that $C should now be
 # closed, and that reading any more will give us EOF

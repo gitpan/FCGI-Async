@@ -2,12 +2,11 @@
 
 use strict;
 
-use Test::More tests => 7;
+use Test::More tests => 5;
+use Test::HexString;
 
 use IO::Async::Loop;
 use IO::Async::Test;
-
-use POSIX qw( EAGAIN );
 
 use FCGI::Async;
 
@@ -26,9 +25,6 @@ my $fcgi = FCGI::Async->new(
    handle => $S,
    on_request => sub { $request = $_[1] },
 );
-
-ok( defined $fcgi, 'defined $fcgi' );
-is( ref $fcgi, "FCGI::Async", 'ref $fcgi is FCGI::Async' );
 
 my $C = connect_client_sock( $selfaddr );
 
