@@ -1,20 +1,15 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2008 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
 
 package FCGI::Async::Request;
 
 use strict;
+use warnings;
 
 use FCGI::Async::Constants;
 use FCGI::Async::BuildParse;
-
-=head1 NAME
-
-FCGI::Async::Request - Class to represent one active FastCGI request
-
-=cut
 
 # The largest amount of data we can fit in a FastCGI record - MUST NOT
 # be greater than 2^16-1
@@ -22,11 +17,13 @@ use constant MAXRECORDDATA => 65535;
 
 use POSIX qw( EAGAIN );
 
-=head1 SYNOPSIS
+our $VERSION = '0.17';
 
-This module would not be used directly by a program using C<FCGI::Async>, but
-rather, objects in this class are passed into the C<on_request> callback of
-the containing C<FCGI::Async> object.
+=head1 NAME
+
+C<FCGI::Async::Request> - a single active FastCGI request
+
+=head1 SYNOPSIS
 
  use FCGI::Async;
  use IO::Async::Loop;
@@ -50,26 +47,19 @@ the containing C<FCGI::Async> object.
 
  $loop->loop_forever;
 
-To serve contents of files on disk, it may be more efficient to use
-C<stream_stdout_then_finish>:
+=head1 DESCRIPTION
 
-    on_request => sub {
-       my ( $fcgi, $req ) = @_;
+Instances of this object class represent individual requests received from the
+webserver that are currently in-progress, and have not yet been completed.
+When given to the controlling program, each request will already have its
+parameters and STDIN data. The program can then write response data to the
+STDOUT stream, messages to the STDERR stream, and eventually finish it.
 
-       open( my $file, "<", "/path/to/file" );
-       $req->print_stdout( "Status: 200 OK\r\n" .
-                           "Content-type: application/octet-stream\r\n" .
-                           "\r\n" );
-
-       $req->stream_stdout_then_finish(
-          sub { read( $file, my $buffer, 8192 ) or return undef; return $buffer },
-          0
-       );
-    }
+This module would not be used directly by a program using C<FCGI::Async>, but
+rather, objects in this class are passed into the C<on_request> callback of
+the containing C<FCGI::Async> object.
 
 =cut
-
-# Internal functions
 
 sub new
 {
@@ -470,6 +460,41 @@ sub is_aborted
 
 __END__
 
+=head1 EXAMPLES
+
+=head2 Streaming A File
+
+To serve contents of files on disk, it may be more efficient to use
+C<stream_stdout_then_finish>:
+
+ use FCGI::Async;
+ use IO::Async::Loop;
+
+ my $fcgi = FCGI::Async->new(
+    on_request => sub {
+       my ( $fcgi, $req ) = @_;
+
+       open( my $file, "<", "/path/to/file" );
+       $req->print_stdout( "Status: 200 OK\r\n" .
+                           "Content-type: application/octet-stream\r\n" .
+                           "\r\n" );
+
+       $req->stream_stdout_then_finish(
+          sub { read( $file, my $buffer, 8192 ) or return undef; return $buffer },
+          0
+       );
+    }
+
+ my $loop = IO::Async::Loop->new();
+
+ $loop->add( $fcgi );
+
+ $loop->loop_forever;
+
+It may be more efficient again to instead use the C<X-Sendfile> feature of
+certain webservers, which allows the webserver itself to serve the file
+efficiently. See your webserver's documentation for more detail.
+
 =head1 AUTHOR
 
-Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>
+Paul Evans <leonerd@leonerd.org.uk>

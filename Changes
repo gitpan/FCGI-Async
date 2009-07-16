@@ -1,5 +1,10 @@
 Revision history for FCGI-Async
 
+0.17    CHANGES:
+         * Added 'use warnings'
+         * Documentation updates
+         * Various small updates to keep CPANTS happy
+
 0.16    BUGFIXES:
          * Support FCGI_GET_VALUES 
            (closes http://rt.cpan.org/Ticket/Display.html?id=43976)

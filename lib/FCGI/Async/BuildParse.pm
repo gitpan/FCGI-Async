@@ -1,11 +1,13 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2007 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
 
-package FCGI::Async::BuildParse;
+package # hide from CPAN
+   FCGI::Async::BuildParse;
 
 use strict;
+use warnings;
 
 use FCGI::Async::Constants;
 

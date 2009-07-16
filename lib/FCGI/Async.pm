@@ -1,12 +1,12 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2008 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
 
 package FCGI::Async;
 
-use warnings;
 use strict;
+use warnings;
 
 use Carp;
 
@@ -17,6 +17,8 @@ use FCGI::Async::Constants;
 
 use IO::Socket::INET;
 
+our $VERSION = '0.17';
+
 # The FCGI_GET_VALUES request might ask for our maximally supported number of
 # concurrent connections or requests. We don't really have an inbuilt maximum,
 # so just respond these large numbers
@@ -25,19 +27,11 @@ our $MAX_REQS  = 1024;
 
 =head1 NAME
 
-FCGI::Async - Module to allow use of FastCGI asynchronously
-
-=cut
-
-our $VERSION = '0.16';
+C<FCGI::Async> - respond asynchronously to FastCGI requests
 
 =head1 SYNOPSIS
 
 B<NOTE>: The constructor API of this module has changed since version 0.13!
-
-This module allows a program to respond to FastCGI requests using an
-asynchronous model. It is based on L<IO::Async> and will fully interact with
-any program using this base.
 
  use FCGI::Async;
  use IO::Async::Loop;
@@ -68,6 +62,16 @@ Or
  $loop->add( $fcgi );
 
  $fcgi->listen( service => 1234 );
+
+=head1 DESCRIPTION
+
+This module allows a program to respond asynchronously to FastCGI requests,
+as part of a program based on L<IO::Async>. An object in this class represents
+a single FastCGI responder that the webserver is configured to communicate
+with. It can handle multiple outstanding requests at a time, responding to
+each as data is provided by the program. Individual outstanding requests that
+have been started but not yet finished, are represented by instances of
+L<FCGI::Async::Request>.
 
 =cut
     
@@ -119,16 +123,6 @@ sub new
    my ( %args ) = @_;
 
    my $self = $class->SUPER::new();
-
-   if( $args{socket} ) {
-      carp "'socket' is now deprecated; use 'handle' instead";
-      $args{handle} = delete $args{socket};
-   }
-
-   if( $args{port} ) {
-      carp "'port' is now deprecated; use 'service' instead";
-      $args{service} = delete $args{port};
-   }
 
    if( defined $args{handle} or defined $args{service} ) {
       my $loop = $args{loop} or croak "Require a 'loop' argument";
@@ -245,7 +239,7 @@ C<FCGI_GET_VALUES>.
 
 When running a local FastCGI responder, the webserver will create a new INET
 socket connected to the script's STDIN file handle. To use the socket in this
-case, it should be passed as the 'socket'
+case, it should be passed as the C<handle> argument.
 
 =head1 SEE ALSO
 
@@ -269,4 +263,4 @@ L<http://www.fastcgi.com/devkit/doc/fcgi-spec.html> - FastCGI Specification
 
 =head1 AUTHOR
 
-Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>
+Paul Evans <leonerd@leonerd.org.uk>

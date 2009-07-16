@@ -1,11 +1,13 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2008 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
 
-package FCGI::Async::ClientConnection;
+package # hide from CPAN
+   FCGI::Async::ClientConnection;
 
 use strict;
+use warnings;
 
 use IO::Async::Stream 0.11;
 use base qw( IO::Async::Stream );
