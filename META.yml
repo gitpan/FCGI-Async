@@ -1,6 +1,6 @@
 ---
 name: FCGI-Async
-version: 0.17
+version: 0.18
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 abstract: respond asynchronously to FastCGI requests
@@ -8,6 +8,8 @@ license: perl
 resources:
   license: http://dev.perl.org/licenses/
 requires:
+  Encode: 0
+  IO::Async::Listener: 0.23
   IO::Async::Loop: 0.16
   IO::Async::Test: 0
 build_requires:
@@ -16,10 +18,10 @@ build_requires:
 provides:
   FCGI::Async:
     file: lib/FCGI/Async.pm
-    version: 0.17
+    version: 0.18
   FCGI::Async::Request:
     file: lib/FCGI/Async/Request.pm
-    version: 0.17
+    version: 0.18
 generated_by: Module::Build version 0.33
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html

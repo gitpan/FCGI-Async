@@ -10,14 +10,14 @@ use warnings;
 
 use Carp;
 
-use base qw( IO::Async::Notifier );
+use base qw( IO::Async::Listener );
 
 use FCGI::Async::ClientConnection;
 use FCGI::Async::Constants;
 
 use IO::Socket::INET;
 
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 
 # The FCGI_GET_VALUES request might ask for our maximally supported number of
 # concurrent connections or requests. We don't really have an inbuilt maximum,
@@ -83,21 +83,6 @@ L<FCGI::Async::Request>.
 
 This function returns a new instance of a C<FCGI::Async> object.
 
-The C<%args> hash must contain the following:
-
-=over 4
-
-=item on_request => CODE
-
-Reference to a handler to call when a new FastCGI request is received.
-It will be invoked as
-
- $on_request->( $fcgi, $request )
-
-where C<$request> will be a new L<FCGI::Async::Request> object.
-
-=back
-
 If either a C<handle> or C<service> argument are passed to the constructor,
 then the newly-created object is added to the given C<IO::Async::Loop>, then
 the C<listen> method is invoked, passing the entire C<%args> hash to it. For
@@ -122,9 +107,19 @@ sub new
    my $class = shift;
    my ( %args ) = @_;
 
-   my $self = $class->SUPER::new();
+   my $self = $class->SUPER::new(
+      exists $args{on_request} ? ( on_request => delete $args{on_request} ) : (),
+      default_encoding => delete $args{default_encoding} || "UTF-8",
+   );
 
-   if( defined $args{handle} or defined $args{service} ) {
+   if( defined $args{handle} ) {
+      my $loop = $args{loop} or croak "Require a 'loop' argument";
+
+      $loop->add( $self );
+
+      $self->configure( handle => $args{handle} );
+   }
+   elsif( defined $args{service} ) {
       my $loop = $args{loop} or croak "Require a 'loop' argument";
 
       $loop->add( $self );
@@ -140,9 +135,47 @@ sub new
       );
    }
 
-   $self->{on_request} = $args{on_request};
-
    return $self;
+}
+
+=head1 PARAMETERS
+
+The following named parameters may be passed to C<new> or C<configure>:
+
+=over 8
+
+=item on_request => CODE
+
+Reference to a handler to call when a new FastCGI request is received.
+It will be invoked as
+
+ $on_request->( $fcgi, $request )
+
+where C<$request> will be a new L<FCGI::Async::Request> object.
+
+=item default_encoding => STRING
+
+Sets the default encoding used by all new requests. If not supplied then
+C<UTF-8> will apply.
+
+=back
+
+=cut
+
+sub configure
+{
+   my $self = shift;
+   my %params = @_;
+
+   if( exists $params{on_request} ) {
+      $self->{on_request} = delete $params{on_request};
+   }
+
+   if( exists $params{default_encoding} ) {
+      $self->{default_encoding} = delete $params{default_encoding};
+   }
+
+   $self->SUPER::configure( %params );
 }
 
 =head1 METHODS
@@ -160,7 +193,8 @@ existing socket filehandle:
 
 =item handle => IO
 
-An IO handle referring to a listen-mode socket.
+An IO handle referring to a listen-mode socket. This is now deprecated; use
+the C<handle> key to the C<new> or C<configure> methods instead.
 
 =back
 
@@ -191,20 +225,23 @@ sub listen
    my $self = shift;
    my %args = @_;
 
-   my $loop = $self->get_loop or croak "Cannot listen without a Loop";
+   if( $args{handle} ) {
+      carp "Using 'handle' as a ->listen argument is deprecated; use the ->configure method instead";
+      $self->configure( handle => $args{handle} );
+   }
+   else {
+      $self->SUPER::listen( %args, socktype => SOCK_STREAM );
+   }
+}
 
-   $loop->listen(
-      socktype => SOCK_STREAM,
-      %args,
+sub on_accept
+{
+   my $self = shift;
+   my ( $newS ) = @_;
 
-      on_accept => sub {
-         my ( $newS ) = @_;
+   my $newreq = FCGI::Async::ClientConnection->new( $newS, $self );
 
-         my $newreq = FCGI::Async::ClientConnection->new( $newS, $self );
-
-         $self->add_child( $newreq );
-      }
-   );
+   $self->add_child( $newreq );
 }
 
 sub _request_ready
@@ -213,6 +250,12 @@ sub _request_ready
    my ( $req ) = @_;
 
    $self->{on_request}->( $self, $req );
+}
+
+sub _default_encoding
+{
+   my $self = shift;
+   return $self->{default_encoding};
 }
 
 # Keep perl happy; keep Britain tidy

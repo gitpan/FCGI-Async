@@ -5,6 +5,8 @@ WriteMakefile
           'NAME' => 'FCGI::Async',
           'VERSION_FROM' => 'lib/FCGI/Async.pm',
           'PREREQ_PM' => {
+                           'Encode' => 0,
+                           'IO::Async::Listener' => '0.23',
                            'IO::Async::Loop' => '0.16',
                            'IO::Async::Test' => 0,
                            'Test::HexString' => 0,

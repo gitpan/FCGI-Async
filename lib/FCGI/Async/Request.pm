@@ -15,9 +15,10 @@ use FCGI::Async::BuildParse;
 # be greater than 2^16-1
 use constant MAXRECORDDATA => 65535;
 
+use Encode qw( find_encoding );
 use POSIX qw( EAGAIN );
 
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 
 =head1 NAME
 
@@ -90,6 +91,8 @@ sub new
 
       used_stderr => 0,
    }, $class;
+
+   $self->set_encoding( $args{fcgi}->_default_encoding );
 
    return $self;
 }
@@ -218,6 +221,26 @@ sub param
    return $self->{params}{$key};
 }
 
+=head2 $req->set_encoding( $encoding )
+
+Sets the character encoding used by the request's STDIN, STDOUT and STDERR
+streams. This method may be called at any time to change the encoding in
+effect, which will be used the next time C<read_stdin_line>, C<read_stdin>,
+C<print_stdout> or C<print_stderr> are called. This encoding will remain in
+effect until changed again.
+
+Defaults to using C<UTF-8>.
+
+=cut
+
+sub set_encoding
+{
+   my $self = shift;
+   my ( $encoding ) = @_;
+
+   $self->{codec} = find_encoding( $encoding );
+}
+
 =head2 $line = $req->read_stdin_line
 
 This method works similarly to the C<< <HANDLE> >> operator. If at least one
@@ -232,11 +255,13 @@ sub read_stdin_line
 {
    my $self = shift;
 
+   my $codec = $self->{codec};
+
    if( $self->{stdin} =~ s/^(.*[\r\n])// ) {
-      return $1;
+      return $codec->decode( $1 );
    }
    elsif( $self->{stdin} =~ s/^(.+)// ) {
-      return $1;
+      return $codec->decode( $1 );
    }
    else {
       return undef;
@@ -261,8 +286,10 @@ sub read_stdin
 
    $size = length $self->{stdin} unless defined $size;
 
+   my $codec = $self->{codec};
+
    # If $size is too big, substr() will cope
-   return substr( $self->{stdin}, 0, $size, "" );
+   return $codec->decode( substr( $self->{stdin}, 0, $size, "" ) );
 }
 
 sub _print_stream
@@ -313,7 +340,9 @@ sub print_stdout
    my $self = shift;
    my ( $data ) = @_;
 
-   $self->{stdout} .= $data;
+   my $codec = $self->{codec};
+
+   $self->{stdout} .= $codec->encode( $data );
 
    my $conn = $self->{conn};
    $conn->want_writeready( 1 );
@@ -331,8 +360,10 @@ sub print_stderr
    my $self = shift;
    my ( $data ) = @_;
 
+   my $codec = $self->{codec};
+
    $self->{used_stderr} = 1;
-   $self->{stderr} .= $data;
+   $self->{stderr} .= $codec->encode( $data );
 
    my $conn = $self->{conn};
    $conn->want_writeready( 1 );

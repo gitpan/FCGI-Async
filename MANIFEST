@@ -26,6 +26,7 @@ t/07request-longparams.t
 t/08request-shortwrites.t
 t/09request-streamstdout.t
 t/10request-close.t
+t/11request-encoding.t
 t/20get_values.t
 t/99pod.t
 t/lib/TestFCGI.pm

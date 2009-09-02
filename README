@@ -47,16 +47,6 @@ CONSTRUCTOR
   $fcgi = FCGI::Async->new( %args )
     This function returns a new instance of a "FCGI::Async" object.
 
-    The %args hash must contain the following:
-
-    on_request => CODE
-        Reference to a handler to call when a new FastCGI request is
-        received. It will be invoked as
-
-         $on_request->( $fcgi, $request )
-
-        where $request will be a new FCGI::Async::Request object.
-
     If either a "handle" or "service" argument are passed to the
     constructor, then the newly-created object is added to the given
     "IO::Async::Loop", then the "listen" method is invoked, passing the
@@ -69,6 +59,21 @@ CONSTRUCTOR
         A reference to the "IO::Async::Loop" which will contain the
         listening sockets.
 
+PARAMETERS
+    The following named parameters may be passed to "new" or "configure":
+
+    on_request => CODE
+            Reference to a handler to call when a new FastCGI request is
+            received. It will be invoked as
+
+             $on_request->( $fcgi, $request )
+
+            where $request will be a new FCGI::Async::Request object.
+
+    default_encoding => STRING
+            Sets the default encoding used by all new requests. If not
+            supplied then "UTF-8" will apply.
+
 METHODS
   $fcgi->listen( %args )
     Start listening for connections on a socket, creating it first if
@@ -78,7 +83,9 @@ METHODS
     an existing socket filehandle:
 
     handle => IO
-        An IO handle referring to a listen-mode socket.
+        An IO handle referring to a listen-mode socket. This is now
+        deprecated; use the "handle" key to the "new" or "configure" methods
+        instead.
 
     Or, to create the listening socket or sockets:
 

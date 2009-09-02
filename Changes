@@ -1,5 +1,12 @@
 Revision history for FCGI-Async
 
+0.18    CHANGES:
+         * Allow setting of per-request encoding for STDIN/STDOUT/STDERR
+           streams
+         * Code adjustment to make use of the new IO::Async::Listener class
+         * Deprecated ->listen( handle => IO ) in favour of ->new or
+           ->configure instead.
+
 0.17    CHANGES:
          * Added 'use warnings'
          * Documentation updates
