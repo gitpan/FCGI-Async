@@ -1,10 +1,9 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2010 -- leonerd@leonerd.org.uk
 
-package # hide from CPAN
-   FCGI::Async::ClientConnection;
+package FCGI::Async::ClientConnection;
 
 use strict;
 use warnings;
@@ -68,26 +67,39 @@ sub on_read
    my $type  = $rec->{type};
    my $reqid = $rec->{reqid};
 
+   if( $reqid == 0 ) {
+      # Management records
+      if( $type == FCGI_GET_VALUES ) {
+         $self->_get_values( $rec );
+      }
+      else {
+         $self->writerecord( { type => FCGI_UNKNOWN_TYPE, reqid => 0 }, pack( "c x7", $type ) );
+      }
+
+      return 1;
+   }
+
    if( $type == FCGI_BEGIN_REQUEST ) {
-      my $req = FCGI::Async::Request->new( 
-         conn => $self,
-         fcgi => $self->{fcgi},
-         rec  => $rec,
-      );
-      $self->{reqs}->{$reqid} = $req;
-      return 1;
-   }
-   elsif( $type == FCGI_GET_VALUES ) {
-      $self->_get_values( $rec );
+      ( my $role, $rec->{flags} ) = unpack( "nc", $rec->{content} );
+
+      if( $role == FCGI_RESPONDER ) {
+         my $req = FCGI::Async::Request->new( 
+            conn => $self,
+            fcgi => $self->{fcgi},
+            rec  => $rec,
+         );
+         $self->{reqs}->{$reqid} = $req;
+      }
+      else {
+         $self->writerecord( { type => FCGI_END_REQUEST, reqid => $rec->{reqid} }, pack( "N c x3", 0, FCGI_UNKNOWN_ROLE ) );
+      }
+
       return 1;
    }
 
-   my $req = $self->{reqs}->{$reqid};
-
-   if( !defined $req ) {
-      # TODO! Some sort of error condition?
-      return 1;
-   }
+   # FastCGI spec says we're supposed to ignore any record apart from
+   # FCGI_BEGIN_REQUEST on unrecognised request IDs
+   my $req = $self->{reqs}->{$reqid} or return 1;
 
    $req->incomingrecord( $rec );
 

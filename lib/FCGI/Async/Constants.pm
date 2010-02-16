@@ -1,10 +1,9 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2010 -- leonerd@leonerd.org.uk
 
-package # hide from CPAN
-   FCGI::Async::Constants;
+package FCGI::Async::Constants;
 
 use strict;
 use warnings;
@@ -53,11 +52,8 @@ foreach my $name ( keys %constants ) {
    import constant $name => $value;
 }
 
-our @ISA = qw( Exporter );
+use Exporter 'import';
 our @EXPORT = keys %constants;
-
-require Exporter;
-import Exporter;
 
 # Keep perl happy; keep Britain tidy
 1;

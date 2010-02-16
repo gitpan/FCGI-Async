@@ -1,5 +1,11 @@
 Revision history for FCGI-Async
 
+0.19    CHANGES:
+         * import Exporter::import instead of @ISAing it
+         * Respond with FCGI_UNKNOWN_TYPE or FCGI_UNKNOWN_ROLE when
+           appropriate (fixes RT 54480)
+         * Updated bundled example applications to a modern IO::Async style
+
 0.18    CHANGES:
          * Allow setting of per-request encoding for STDIN/STDOUT/STDERR
            streams

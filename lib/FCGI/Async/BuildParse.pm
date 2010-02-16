@@ -1,10 +1,9 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2010 -- leonerd@leonerd.org.uk
 
-package # hide from CPAN
-   FCGI::Async::BuildParse;
+package FCGI::Async::BuildParse;
 
 use strict;
 use warnings;
@@ -21,7 +20,7 @@ sub build_record
    
    my $contentlen = length $content;
 
-   my ( $headbuffer ) = pack( "ccnncc", FCGI_VERSION_1, $rec->{type}, $rec->{reqid}, $contentlen, 0, 0 );
+   my ( $headbuffer ) = pack( "c c n n c x", FCGI_VERSION_1, $rec->{type}, $rec->{reqid}, $contentlen, 0 );
 
    return $headbuffer . $content;
 }
@@ -30,7 +29,7 @@ sub parse_record_header
 {
    my ( $headbuffer ) = @_;
 
-   my ( $ver, $type, $reqid, $contentlen, $paddinglen, undef ) = unpack( "ccnncc", $headbuffer );
+   my ( $ver, $type, $reqid, $contentlen, $paddinglen ) = unpack( "c c n n c x", $headbuffer );
 
    my %rec = ( ver   => $ver, 
                type  => $type,

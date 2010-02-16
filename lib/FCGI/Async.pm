@@ -1,7 +1,7 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2010 -- leonerd@leonerd.org.uk
 
 package FCGI::Async;
 
@@ -17,7 +17,7 @@ use FCGI::Async::Constants;
 
 use IO::Socket::INET;
 
-our $VERSION = '0.18';
+our $VERSION = '0.19';
 
 # The FCGI_GET_VALUES request might ask for our maximally supported number of
 # concurrent connections or requests. We don't really have an inbuilt maximum,
@@ -88,8 +88,8 @@ then the newly-created object is added to the given C<IO::Async::Loop>, then
 the C<listen> method is invoked, passing the entire C<%args> hash to it. For
 more detail, see the C<listen> method below.
 
-If of the above arguments are given, then a C<IO::Async::Loop> must also be
-provided:
+If either of the above arguments are given, then a C<IO::Async::Loop> must
+also be provided:
 
 =over 4
 
@@ -117,7 +117,12 @@ sub new
 
       $loop->add( $self );
 
-      $self->configure( handle => $args{handle} );
+      my $handle = delete $args{handle};
+
+      # IO::Async version 0.27 requires this to support ->sockname method
+      bless $handle, "IO::Socket" if ref($handle) eq "GLOB" and defined getsockname($handle);
+
+      $self->configure( handle => $handle );
    }
    elsif( defined $args{service} ) {
       my $loop = $args{loop} or croak "Require a 'loop' argument";

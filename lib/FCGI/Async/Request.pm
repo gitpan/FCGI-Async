@@ -1,7 +1,7 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2005-2009 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2005-2010 -- leonerd@leonerd.org.uk
 
 package FCGI::Async::Request;
 
@@ -18,7 +18,7 @@ use constant MAXRECORDDATA => 65535;
 use Encode qw( find_encoding );
 use POSIX qw( EAGAIN );
 
-our $VERSION = '0.18';
+our $VERSION = '0.19';
 
 =head1 NAME
 
@@ -69,16 +69,12 @@ sub new
 
    my $rec = $args{rec};
 
-   my $content = $rec->{content};
-   my ( $role, $flags ) = unpack( "nc", $content );
-
    my $self = bless {
       conn       => $args{conn},
       fcgi       => $args{fcgi},
 
       reqid      => $rec->{reqid},
-      role       => $role,
-      keepconn   => $flags & FCGI_KEEP_CONN,
+      keepconn   => $rec->{flags} & FCGI_KEEP_CONN,
 
       state      => STATE_ACTIVE,
       stdin      => "",
@@ -227,9 +223,8 @@ Sets the character encoding used by the request's STDIN, STDOUT and STDERR
 streams. This method may be called at any time to change the encoding in
 effect, which will be used the next time C<read_stdin_line>, C<read_stdin>,
 C<print_stdout> or C<print_stderr> are called. This encoding will remain in
-effect until changed again.
-
-Defaults to using C<UTF-8>.
+effect until changed again. The encoding of a new request is determined by the
+C<default_encoding> parameter of the containing C<FCGI::Async> object.
 
 =cut
 
@@ -412,7 +407,7 @@ sub end_request
 
    return if $self->is_aborted;
 
-   my $content = pack( "Ncccc", $status, $protstatus, 0, 0, 0 );
+   my $content = pack( "N c x3", $status, $protstatus );
 
    $self->writerecord( { type => FCGI_END_REQUEST, content => $content } );
 }

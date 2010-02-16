@@ -1,8 +1,8 @@
-package t::lib::TestFCGI;
+package TestFCGI;
 
 use strict;
 
-use base qw( Exporter );
+use Exporter 'import';
 our @EXPORT = qw(
    fcgi_trans
 

@@ -52,8 +52,8 @@ CONSTRUCTOR
     "IO::Async::Loop", then the "listen" method is invoked, passing the
     entire %args hash to it. For more detail, see the "listen" method below.
 
-    If of the above arguments are given, then a "IO::Async::Loop" must also
-    be provided:
+    If either of the above arguments are given, then a "IO::Async::Loop"
+    must also be provided:
 
     loop => IO::Async::Loop
         A reference to the "IO::Async::Loop" which will contain the

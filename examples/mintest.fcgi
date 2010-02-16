@@ -41,6 +41,7 @@ EOF
 }
 
 my $fcgi = FCGI::Async->new(
+   handle => \*STDIN,
    loop => $loop,
    on_request => \&on_request,
 );

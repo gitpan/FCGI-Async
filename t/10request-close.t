@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 
 use strict;
+use lib 't/lib';
 
 use Test::More tests => 5;
 use Test::HexString;
@@ -10,7 +11,7 @@ use IO::Async::Test;
 
 use FCGI::Async;
 
-use t::lib::TestFCGI;
+use TestFCGI;
 
 my $request;
 
