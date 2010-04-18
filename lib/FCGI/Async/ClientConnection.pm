@@ -11,7 +11,15 @@ use warnings;
 use IO::Async::Stream 0.11;
 use base qw( IO::Async::Stream );
 
-use FCGI::Async::Constants;
+use Net::FastCGI::Constant qw( FCGI_VERSION_1 :type :role :protocol_status );
+use Net::FastCGI::Protocol qw(
+   build_record parse_header
+   build_params parse_params
+   parse_begin_request_body
+   build_end_request_body
+   build_unknown_type_body
+);
+
 use FCGI::Async::Request;
 
 sub new
@@ -53,19 +61,22 @@ sub on_read
    return 0 unless( $blen >= 8 );
 
    # Excellent - parse it
-   my $rec = FCGI::Async::BuildParse::parse_record_header( $$buffref );
-
-   die "Bad record version" unless( $rec->{ver} eq FCGI_VERSION_1 );
+   my ( $type, $reqid, $contentlen, $padlen ) = parse_header( $$buffref );
 
    # Do we have enough for a complete record?
-   return 0 unless( $blen >= 8 + $rec->{len} + $rec->{plen} );
+   return 0 unless( $blen >= 8 + $contentlen + $padlen );
 
    substr( $$buffref, 0, 8, "" ); # Header
-   $rec->{content} = substr( $$buffref, 0, $rec->{len}, "" );
-   substr( $$buffref, 0, $rec->{plen}, "" ); # Padding
 
-   my $type  = $rec->{type};
-   my $reqid = $rec->{reqid};
+   my $rec = {
+      type => $type,
+      reqid => $reqid,
+      len   => $contentlen,
+      plen  => $padlen,
+   };
+   $rec->{content} = substr( $$buffref, 0, $contentlen, "" );
+
+   substr( $$buffref, 0, $rec->{plen}, "" ); # Padding
 
    if( $reqid == 0 ) {
       # Management records
@@ -73,14 +84,14 @@ sub on_read
          $self->_get_values( $rec );
       }
       else {
-         $self->writerecord( { type => FCGI_UNKNOWN_TYPE, reqid => 0 }, pack( "c x7", $type ) );
+         $self->writerecord( { type => FCGI_UNKNOWN_TYPE, reqid => 0 }, build_unknown_type_body( $type ) );
       }
 
       return 1;
    }
 
    if( $type == FCGI_BEGIN_REQUEST ) {
-      ( my $role, $rec->{flags} ) = unpack( "nc", $rec->{content} );
+      ( my $role, $rec->{flags} ) = parse_begin_request_body( $rec->{content} );
 
       if( $role == FCGI_RESPONDER ) {
          my $req = FCGI::Async::Request->new( 
@@ -91,7 +102,9 @@ sub on_read
          $self->{reqs}->{$reqid} = $req;
       }
       else {
-         $self->writerecord( { type => FCGI_END_REQUEST, reqid => $rec->{reqid} }, pack( "N c x3", 0, FCGI_UNKNOWN_ROLE ) );
+         $self->writerecord( { type => FCGI_END_REQUEST, reqid => $rec->{reqid} }, 
+            build_end_request_body( 0, FCGI_UNKNOWN_ROLE )
+         );
       }
 
       return 1;
@@ -135,9 +148,7 @@ sub writerecord
    my $self = shift;
    my ( $rec, $content ) = @_;
 
-   my $buffer = FCGI::Async::BuildParse::build_record( $rec, $content );
-
-   $self->write( $buffer );
+   $self->write( build_record( $rec->{type}, $rec->{reqid}, $content ) );
 }
 
 sub _removereq
@@ -157,12 +168,10 @@ sub _get_values
 
    my $ret = "";
 
-   while( length $content ) {
-      my ( $name ) = FCGI::Async::BuildParse::parse_namevalue( $content );
-
+   foreach my $name ( keys %{ parse_params( $content ) } ) {
       my $value = $self->_get_value( $name );
       if( defined $value ) {
-         $ret .= FCGI::Async::BuildParse::build_namevalue( $name, $value );
+         $ret .= build_params( { $name => $value } );
       }
    }
 

@@ -1,5 +1,5 @@
 NAME
-    "FCGI::Async" - respond asynchronously to FastCGI requests
+    "FCGI::Async" - use FastCGI with IO::Async
 
 SYNOPSIS
     NOTE: The constructor API of this module has changed since version 0.13!

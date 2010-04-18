@@ -13,11 +13,10 @@ use Carp;
 use base qw( IO::Async::Listener );
 
 use FCGI::Async::ClientConnection;
-use FCGI::Async::Constants;
 
 use IO::Socket::INET;
 
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 
 # The FCGI_GET_VALUES request might ask for our maximally supported number of
 # concurrent connections or requests. We don't really have an inbuilt maximum,
@@ -27,7 +26,7 @@ our $MAX_REQS  = 1024;
 
 =head1 NAME
 
-C<FCGI::Async> - respond asynchronously to FastCGI requests
+C<FCGI::Async> - use FastCGI with L<IO::Async>
 
 =head1 SYNOPSIS
 

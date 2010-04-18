@@ -25,11 +25,16 @@ sub fcgi_trans
    my $data = $args{data};
    my $len = length $data;
 
+   # Pad data to 8byte boundary
+   my $plen = 8 - ( $len % 8 );
+   $plen = 0 if $plen == 8;
+
    #             version type         id         length padlen reserved
    return pack( "C       C            n          n      C      C",
-                1,       $args{type}, $args{id}, $len,  0,     0 )
+                1,       $args{type}, $args{id}, $len,  $plen, 0 )
           .
-          $data;
+          $data .
+          "\0" x $plen;
 }
 
 sub make_server_sock

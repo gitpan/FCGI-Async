@@ -8,8 +8,13 @@ package FCGI::Async::Request;
 use strict;
 use warnings;
 
-use FCGI::Async::Constants;
-use FCGI::Async::BuildParse;
+use Carp;
+
+use Net::FastCGI::Constant qw( :type :flag :protocol_status );
+use Net::FastCGI::Protocol qw( 
+   parse_params
+   build_end_request_body
+);
 
 # The largest amount of data we can fit in a FastCGI record - MUST NOT
 # be greater than 2^16-1
@@ -18,7 +23,7 @@ use constant MAXRECORDDATA => 65535;
 use Encode qw( find_encoding );
 use POSIX qw( EAGAIN );
 
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 
 =head1 NAME
 
@@ -76,7 +81,6 @@ sub new
       reqid      => $rec->{reqid},
       keepconn   => $rec->{flags} & FCGI_KEEP_CONN,
 
-      state      => STATE_ACTIVE,
       stdin      => "",
       stdindone  => 0,
       params     => {},
@@ -151,13 +155,12 @@ sub incomingrecord_params
    my $len     = $rec->{len};
 
    if( $len ) {
-      my $paramshash = FCGI::Async::BuildParse::parse_namevalues( $content );
-      my $p = $self->{params};
-      foreach ( keys %$paramshash ) {
-         $p->{$_} = $paramshash->{$_};
-      }
+      no warnings 'uninitialized';
+      $self->{paramscontent} .= $content;
+      return;
    }
    else {
+      $self->{params} = parse_params( delete $self->{paramscontent} );
       $self->{paramsdone} = 1;
    }
 
@@ -224,7 +227,9 @@ streams. This method may be called at any time to change the encoding in
 effect, which will be used the next time C<read_stdin_line>, C<read_stdin>,
 C<print_stdout> or C<print_stderr> are called. This encoding will remain in
 effect until changed again. The encoding of a new request is determined by the
-C<default_encoding> parameter of the containing C<FCGI::Async> object.
+C<default_encoding> parameter of the containing C<FCGI::Async> object. If the
+value C<undef> is passed, the encoding will be removed, and the above methods
+will work directly on bytes instead of encoded strings.
 
 =cut
 
@@ -233,7 +238,14 @@ sub set_encoding
    my $self = shift;
    my ( $encoding ) = @_;
 
-   $self->{codec} = find_encoding( $encoding );
+   if( defined $encoding ) {
+      my $codec = find_encoding( $encoding );
+      defined $codec or croak "Unrecognised encoding '$encoding'";
+      $self->{codec} = $codec;
+   }
+   else {
+      undef $self->{codec};
+   }
 }
 
 =head2 $line = $req->read_stdin_line
@@ -253,10 +265,10 @@ sub read_stdin_line
    my $codec = $self->{codec};
 
    if( $self->{stdin} =~ s/^(.*[\r\n])// ) {
-      return $codec->decode( $1 );
+      return $codec ? $codec->decode( $1 ) : $1;
    }
    elsif( $self->{stdin} =~ s/^(.+)// ) {
-      return $codec->decode( $1 );
+      return $codec ? $codec->decode( $1 ) : $1;
    }
    else {
       return undef;
@@ -284,7 +296,8 @@ sub read_stdin
    my $codec = $self->{codec};
 
    # If $size is too big, substr() will cope
-   return $codec->decode( substr( $self->{stdin}, 0, $size, "" ) );
+   my $bytes = substr( $self->{stdin}, 0, $size, "" );
+   return $codec ? $codec->decode( $bytes ) : $bytes;
 }
 
 sub _print_stream
@@ -337,7 +350,7 @@ sub print_stdout
 
    my $codec = $self->{codec};
 
-   $self->{stdout} .= $codec->encode( $data );
+   $self->{stdout} .= $codec ? $codec->encode( $data ) : $data;
 
    my $conn = $self->{conn};
    $conn->want_writeready( 1 );
@@ -358,7 +371,7 @@ sub print_stderr
    my $codec = $self->{codec};
 
    $self->{used_stderr} = 1;
-   $self->{stderr} .= $codec->encode( $data );
+   $self->{stderr} .= $codec ? $codec->encode( $data ) : $data;
 
    my $conn = $self->{conn};
    $conn->want_writeready( 1 );
@@ -400,18 +413,6 @@ sub stream_stdout_then_finish
    $conn->want_writeready( 1 );
 }
 
-sub end_request
-{
-   my $self = shift;
-   my ( $status, $protstatus ) = @_;
-
-   return if $self->is_aborted;
-
-   my $content = pack( "N c x3", $status, $protstatus );
-
-   $self->writerecord( { type => FCGI_END_REQUEST, content => $content } );
-}
-
 =head2 $req->finish( $exitcode )
 
 When the request has been dealt with, this method should be called to indicate
@@ -440,7 +441,9 @@ sub finish
    # Signal the end of STDERR if we used it
    $self->writerecord( { type => FCGI_STDERR, content => "" } ) if $self->{used_stderr};
 
-   $self->end_request( $exitcode || 0, FCGI_REQUEST_COMPLETE );
+   $self->writerecord( { type => FCGI_END_REQUEST, 
+         content => build_end_request_body( $exitcode || 0, FCGI_REQUEST_COMPLETE )
+   } );
 
    my $conn = $self->{conn};
 

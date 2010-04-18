@@ -1,5 +1,15 @@
 Revision history for FCGI-Async
 
+0.20    CHANGES:
+         * Use Net::FastCGI for low-level FastCGI constants and message
+           handling functions
+         * Ensure that ->set_encoding( undef ) actually works to disable the
+           encoding mechanism
+
+        BUGFIXES:
+         * Collect the entire PARAMS stream and only parse it when it's all
+           present, rather than piecewise
+
 0.19    CHANGES:
          * import Exporter::import instead of @ISAing it
          * Respond with FCGI_UNKNOWN_TYPE or FCGI_UNKNOWN_ROLE when

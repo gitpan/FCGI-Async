@@ -6,9 +6,7 @@ examples/fortune.fcgi
 examples/mintest.fcgi
 examples/sample.cgi
 lib/FCGI/Async.pm
-lib/FCGI/Async/BuildParse.pm
 lib/FCGI/Async/ClientConnection.pm
-lib/FCGI/Async/Constants.pm
 lib/FCGI/Async/Request.pm
 LICENSE
 Makefile.PL
@@ -27,6 +25,7 @@ t/08request-shortwrites.t
 t/09request-streamstdout.t
 t/10request-close.t
 t/11request-encoding.t
+t/12request-unknown.t
 t/20get_values.t
 t/99pod.t
 t/lib/TestFCGI.pm
