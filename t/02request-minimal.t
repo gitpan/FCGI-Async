@@ -3,8 +3,9 @@
 use strict;
 use lib 't/lib';
 
-use Test::More tests => 7;
+use Test::More tests => 9;
 use Test::HexString;
+use Test::Refcount;
 
 use IO::Async::Loop;
 use IO::Async::Test;
@@ -29,6 +30,9 @@ my $fcgi = FCGI::Async->new(
 
 ok( defined $fcgi, 'defined $fcgi' );
 isa_ok( $fcgi, "FCGI::Async", '$fcgi isa FCGI::Async' );
+
+# One ref in the Loop as well as this lexical variable
+is_refcount( $fcgi, 2, '$fcgi has refcount 2 initially' );
 
 my $C = connect_client_sock( $selfaddr );
 
@@ -57,6 +61,8 @@ is( $request->read_stdin_line,
 
 $request->finish;
 
+undef $request; # for refcount
+
 my $expect;
 
 $expect =
@@ -78,3 +84,5 @@ is_hexstr( $buffer, $expect, 'FastCGI end request record' );
 
 my $l = $C->sysread( $buffer, 8192 );
 is( $l, 0, 'Client connection now closed' );
+
+is_refcount( $fcgi, 2, '$fcgi has refcount 2 finally' );

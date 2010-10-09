@@ -37,35 +37,32 @@ $C->syswrite(
    # End of parameters
    fcgi_trans( type => 4, id => 1, data => "" ) .
    # STDIN
-   fcgi_trans( type => 5, id => 1, data => "Hello, FastCGI script\r\n" . 
-                                           "Here are several lines of data\r\n" .
-                                           "They should appear on STDIN\r\n" ) .
+   fcgi_trans( type => 5, id => 1, data => "Some data on STDIN\nAnd another line\n" ) .
    # End of STDIN
    fcgi_trans( type => 5, id => 1, data => "" )
 );
 
 wait_for { defined $request };
 
-isa_ok( $request, 'FCGI::Async::Request', '$request isa FCGI::Async::Request' );
+my $stdin = $request->stdin;
 
-is_deeply( $request->params,
-           { FOO => 'foo', SPLOT => 'splot' },
-           '$request has correct params' );
-is( $request->read_stdin_line,
-    "Hello, FastCGI script\r\n",
-    '$request has correct STDIN line 1' );
-is( $request->read_stdin_line,
-    "Here are several lines of data\r\n",
-    '$request has correct STDIN line 2' );
-is( $request->read_stdin_line,
-    "They should appear on STDIN\r\n",
-    '$request has correct STDIN line 3' );
-is( $request->read_stdin_line,
-    undef,
-    '$request has correct STDIN finish' );
+ok( defined $stdin, '$request->stdin defined' );
 
-$request->print_stdout( "Hello, world!" );
-$request->print_stderr( "Some errors occured\n" );
+is( <$stdin>, "Some data on STDIN\n", '<$stdin>' );
+
+is( read( $stdin, my $readbuf, 8192 ), 17, 'read $stdin length' );
+is( $readbuf, "And another line\n",        'read $stdin buffer' );
+
+my $stdout = $request->stdout;
+
+ok( defined $stdout, '$request->stdout defined' );
+print $stdout "Hello, world!";
+
+my $stderr = $request->stderr;
+
+ok( defined $stderr, '$request->stderr defined' );
+print $stderr "Some errors occured\n";
+
 $request->finish( 5 );
 
 my $expect;

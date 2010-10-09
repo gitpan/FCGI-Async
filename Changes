@@ -1,5 +1,11 @@
 Revision history for FCGI-Async
 
+0.21    CHANGES:
+         * Implement HTTP::Request/HTTP::Response gatewaying
+         * Implement PSGI gatewaying
+         * Provide Plack::Handler::FCGI::Async for plackup et.al.
+         * Implement ->stdin, ->stdout, ->stderr pseudo-filehandles
+
 0.20    CHANGES:
          * Use Net::FastCGI for low-level FastCGI constants and message
            handling functions

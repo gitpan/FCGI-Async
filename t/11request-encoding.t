@@ -32,9 +32,6 @@ isa_ok( $fcgi, "FCGI::Async", '$fcgi isa FCGI::Async' );
 
 my $C = connect_client_sock( $selfaddr );
 
-# Got it - now pretend to be an FCGI client, such as how a webserver would
-# behave.
-
 $C->syswrite(
    # Begin
    fcgi_trans( type => 1, id => 1, data => "\0\1\0\0\0\0\0\0" ) .

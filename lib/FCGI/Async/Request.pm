@@ -23,7 +23,7 @@ use constant MAXRECORDDATA => 65535;
 use Encode qw( find_encoding );
 use POSIX qw( EAGAIN );
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 
 =head1 NAME
 
@@ -97,7 +97,7 @@ sub new
    return $self;
 }
 
-sub writerecord
+sub write_record
 {
    my $self = shift;
    my ( $rec ) = @_;
@@ -107,7 +107,7 @@ sub writerecord
    my $content = $rec->{content};
    my $contentlen = length( $content );
    if( $contentlen > MAXRECORDDATA ) {
-      warn __PACKAGE__."->writerecord() called with content longer than ".MAXRECORDDATA." bytes - truncating";
+      warn __PACKAGE__."->write_record() called with content longer than ".MAXRECORDDATA." bytes - truncating";
       $content = substr( $content, 0, MAXRECORDDATA );
    }
 
@@ -115,7 +115,7 @@ sub writerecord
 
    my $conn = $self->{conn};
 
-   $conn->writerecord( $rec, $content );
+   $conn->write_record( $rec, $content );
 
 }
 
@@ -308,7 +308,7 @@ sub _print_stream
    while( length $data ) {
       # Send chunks of up to MAXRECORDDATA bytes at once
       my $chunk = substr( $data, 0, MAXRECORDDATA, "" );
-      $self->writerecord( { type => $stream, content => $chunk } );
+      $self->write_record( { type => $stream, content => $chunk } );
    }
 }
 
@@ -413,6 +413,64 @@ sub stream_stdout_then_finish
    $conn->want_writeready( 1 );
 }
 
+=head2 $stdin = $req->stdin
+
+Returns an IO handle representing the request's STDIN buffer. This may be read
+from using the C<read> or C<readline> functions or the C<< <$stdin> >>
+operator.
+
+Note that this will be a tied IO handle, it will not be useable directly as an
+OS-level filehandle.
+
+=cut
+
+sub stdin
+{
+   my $self = shift;
+
+   return FCGI::Async::Request::TiedHandle->new(
+      READ => sub { 
+         $_[1] = $self->read_stdin( $_[2] );
+         return defined $_[1] ? length $_[1] : 0;
+      },
+      READLINE => sub {
+         return $self->read_stdin_line;
+      },
+   );
+}
+
+=head2 $stdout = $req->stdout
+
+=head2 $stderr = $req->stderr
+
+Returns an IO handle representing the request's STDOUT or STDERR streams
+respectively. These may written to using C<print>, C<printf>, C<say>, etc..
+
+Note that these will be tied IO handles, they will not be useable directly as
+an OS-level filehandle.
+
+=cut
+
+sub _stdouterr
+{
+   my $self = shift;
+   my ( $method ) = @_;
+
+   return FCGI::Async::Request::TiedHandle->new(
+      WRITE => sub { $self->$method( $_[1] ) },
+   );
+}
+
+sub stdout
+{
+   return shift->_stdouterr( "print_stdout" );
+}
+
+sub stderr
+{
+   return shift->_stdouterr( "print_stderr" );
+}
+
 =head2 $req->finish( $exitcode )
 
 When the request has been dealt with, this method should be called to indicate
@@ -436,12 +494,12 @@ sub finish
    $self->_flush_streams;
 
    # Signal the end of STDOUT
-   $self->writerecord( { type => FCGI_STDOUT, content => "" } );
+   $self->write_record( { type => FCGI_STDOUT, content => "" } );
 
    # Signal the end of STDERR if we used it
-   $self->writerecord( { type => FCGI_STDERR, content => "" } ) if $self->{used_stderr};
+   $self->write_record( { type => FCGI_STDERR, content => "" } ) if $self->{used_stderr};
 
-   $self->writerecord( { type => FCGI_END_REQUEST, 
+   $self->write_record( { type => FCGI_END_REQUEST, 
          content => build_end_request_body( $exitcode || 0, FCGI_REQUEST_COMPLETE )
    } );
 
@@ -483,6 +541,121 @@ sub is_aborted
    my $self = shift;
    return $self->{aborted};
 }
+
+=head1 HTTP::Request/Response Interface
+
+The following pair of methods form an interface that allows the request to be
+used as a source of C<HTTP::Request> objects, responding to them by sending
+C<HTTP::Response> objects. This may be useful to fit it in to existing code
+that already uses these.
+
+=cut
+
+=head2 $http_req = $req->as_http_request
+
+Returns a new C<HTTP::Request> object that gives a reasonable approximation to
+the request. Because the webserver has translated the original HTTP request
+into FastCGI parameters, this may not be a perfect recreation of the request
+as received by the webserver.
+
+=cut
+
+sub as_http_request
+{
+   my $self = shift;
+
+   require HTTP::Request;
+
+   my $params = $self->params;
+
+   my $method = $params->{REQUEST_METHOD} || "GET";
+
+   my $authority = 
+      ( $params->{HTTP_HOST} || $params->{SERVER_NAME} || "" ) . ":" .
+      ( $params->{SERVER_PORT} || "80" );
+
+   my $path = join "", grep defined && length,
+      $params->{SCRIPT_NAME},
+      $params->{PATH_INFO};
+   $path = "/" if !length $path;
+
+   $path .= "?$params->{QUERY_STRING}" if length( $params->{QUERY_STRING} || "" );
+
+   my $uri = URI->new( "http://$authority$path" )->canonical;
+
+   my @headers;
+
+   # Content-Type and Content-Length come specially
+   push @headers, "Content-Type"   => $params->{CONTENT_TYPE}
+      if exists $params->{CONTENT_TYPE};
+
+   push @headers, "Content-Length" => $params->{CONTENT_LENGTH}
+      if exists $params->{CONTENT_LENGTH};
+
+   # Pull all the HTTP_FOO parameters as headers. These will be in all-caps
+   # and use _ for word separators, but HTTP::Headers can cope
+   foreach ( keys %$params ) {
+      m/^HTTP_(.*)$/ and push @headers, $1 => $params->{$_};
+   }
+
+   my $content = $self->{stdin};
+
+   return HTTP::Request->new( $method, $uri, \@headers, $content );
+}
+
+=head2 $req->send_http_response( $resp )
+
+Sends the given C<HTTP::Response> object as the response to this request. The
+status, headers and content are all written out to the request's STDOUT stream
+and then the request is finished with 0 as the exit code.
+
+=cut
+
+sub send_http_response
+{
+   my $self = shift;
+   my ( $resp ) = @_;
+
+   # (Fast)CGI suggests this is the way to report the status
+   $resp->header( Status => $resp->code );
+
+   my $topline = $resp->protocol . " " . $resp->status_line;
+
+   $self->print_stdout( $topline . "\r\n" );
+   $self->print_stdout( $resp->headers_as_string( "\r\n" ) );
+
+   $self->print_stdout( "\r\n" );
+
+   $self->print_stdout( $resp->content );
+   $self->finish( 0 );
+}
+
+package # hide from CPAN
+   FCGI::Async::Request::TiedHandle;
+use base qw( Tie::Handle );
+
+use Symbol qw( gensym );
+
+sub new
+{
+   my $class = shift;
+
+   my $handle = gensym;
+   tie *$handle, $class, @_;
+
+   return $handle;
+}
+
+sub TIEHANDLE
+{
+   my $class = shift;
+   return bless { @_ }, $class;
+}
+
+sub CLOSE    { shift->{CLOSE}->( @_ ) }
+sub READ     { shift->{READ}->( @_ ) }
+sub READLINE { shift->{READLINE}->( @_ ) }
+sub WRITE    { shift->{WRITE}->( @_ ) }
 
 # Keep perl happy; keep Britain tidy
 1;

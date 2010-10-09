@@ -4,6 +4,7 @@ use strict;
 
 use Exporter 'import';
 our @EXPORT = qw(
+   fcgi_keyval
    fcgi_trans
 
    make_server_sock
@@ -15,6 +16,19 @@ use IO::Socket::INET;
 # This test code gets scary to write without effectively writing our
 # own FastCGI client implementation. Without doing that, the best thing we can
 # do is provide a little helper function to build FastCGI transaction records.
+
+sub fcgi_keyval
+{
+   my ( $key, $value ) = @_;
+
+   my $klen = length $key;
+   my $vlen = length $value;
+
+   $klen < 128 and $vlen < 128 and
+      return pack( "C1C1A*A*", $klen, $vlen, $key, $value );
+
+   die "Cannot represent keyval (klen=$klen vlen=$vlen)\n";
+}
 
 sub fcgi_trans
 {

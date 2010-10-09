@@ -16,7 +16,7 @@ use FCGI::Async::ClientConnection;
 
 use IO::Socket::INET;
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 
 # The FCGI_GET_VALUES request might ask for our maximally supported number of
 # concurrent connections or requests. We don't really have an inbuilt maximum,

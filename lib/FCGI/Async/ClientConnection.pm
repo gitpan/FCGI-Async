@@ -8,16 +8,13 @@ package FCGI::Async::ClientConnection;
 use strict;
 use warnings;
 
-use IO::Async::Stream 0.11;
-use base qw( IO::Async::Stream );
+use base qw( FCGI::Async::Stream );
 
 use Net::FastCGI::Constant qw( FCGI_VERSION_1 :type :role :protocol_status );
 use Net::FastCGI::Protocol qw(
-   build_record parse_header
    build_params parse_params
    parse_begin_request_body
    build_end_request_body
-   build_unknown_type_body
 );
 
 use FCGI::Async::Request;
@@ -42,53 +39,22 @@ sub new
    return $self;
 }
 
-# Callback function for IO::Async::Stream
-sub on_read
+sub on_mgmt_record
 {
    my $self = shift;
-   my ( $buffref, $handleclosed ) = @_;
+   my ( $type, $rec ) = @_;
 
-   my $blen = length $$buffref;
+   return $self->_get_values( $rec ) if $type == FCGI_GET_VALUES;
 
-   if( $handleclosed ) {
-      # Abort
-      my $fcgi = $self->{fcgi};
-      $fcgi->remove_child( $self );
-      return;
-   }
+   return $self->SUPER::on_mgmt_record( $type, $rec );
+}
 
-   # Do we have a record header yet?
-   return 0 unless( $blen >= 8 );
+sub on_record
+{
+   my $self = shift;
+   my ( $reqid, $rec ) = @_;
 
-   # Excellent - parse it
-   my ( $type, $reqid, $contentlen, $padlen ) = parse_header( $$buffref );
-
-   # Do we have enough for a complete record?
-   return 0 unless( $blen >= 8 + $contentlen + $padlen );
-
-   substr( $$buffref, 0, 8, "" ); # Header
-
-   my $rec = {
-      type => $type,
-      reqid => $reqid,
-      len   => $contentlen,
-      plen  => $padlen,
-   };
-   $rec->{content} = substr( $$buffref, 0, $contentlen, "" );
-
-   substr( $$buffref, 0, $rec->{plen}, "" ); # Padding
-
-   if( $reqid == 0 ) {
-      # Management records
-      if( $type == FCGI_GET_VALUES ) {
-         $self->_get_values( $rec );
-      }
-      else {
-         $self->writerecord( { type => FCGI_UNKNOWN_TYPE, reqid => 0 }, build_unknown_type_body( $type ) );
-      }
-
-      return 1;
-   }
+   my $type = $rec->{type};
 
    if( $type == FCGI_BEGIN_REQUEST ) {
       ( my $role, $rec->{flags} ) = parse_begin_request_body( $rec->{content} );
@@ -102,21 +68,19 @@ sub on_read
          $self->{reqs}->{$reqid} = $req;
       }
       else {
-         $self->writerecord( { type => FCGI_END_REQUEST, reqid => $rec->{reqid} }, 
+         $self->write_record( { type => FCGI_END_REQUEST, reqid => $rec->{reqid} }, 
             build_end_request_body( 0, FCGI_UNKNOWN_ROLE )
          );
       }
 
-      return 1;
+      return;
    }
 
    # FastCGI spec says we're supposed to ignore any record apart from
    # FCGI_BEGIN_REQUEST on unrecognised request IDs
-   my $req = $self->{reqs}->{$reqid} or return 1;
+   my $req = $self->{reqs}->{$reqid} or return;
 
    $req->incomingrecord( $rec );
-
-   return 1;
 }
 
 sub on_write_ready
@@ -141,14 +105,6 @@ sub on_outgoing_empty
    }
 
    $self->want_writeready( $want_writeready );
-}
-
-sub writerecord
-{
-   my $self = shift;
-   my ( $rec, $content ) = @_;
-
-   $self->write( build_record( $rec->{type}, $rec->{reqid}, $content ) );
 }
 
 sub _removereq
@@ -176,7 +132,7 @@ sub _get_values
    }
 
    if( length $ret ) {
-      $self->writerecord(
+      $self->write_record(
          {
             type  => FCGI_GET_VALUES_RESULT,
             reqid => 0,

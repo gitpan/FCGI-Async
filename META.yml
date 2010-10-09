@@ -5,6 +5,7 @@ author:
 build_requires:
   Test::HexString: 0
   Test::More: 0
+  Test::Refcount: 0
 configure_requires:
   Module::Build: 0.36
 generated_by: 'Module::Build version 0.3607'
@@ -16,19 +17,31 @@ name: FCGI-Async
 provides:
   FCGI::Async:
     file: lib/FCGI/Async.pm
-    version: 0.20
+    version: 0.21
   FCGI::Async::ClientConnection:
     file: lib/FCGI/Async/ClientConnection.pm
+  FCGI::Async::PSGI:
+    file: lib/FCGI/Async/PSGI.pm
+    version: 0.21
   FCGI::Async::Request:
     file: lib/FCGI/Async/Request.pm
-    version: 0.20
+    version: 0.21
+  FCGI::Async::Stream:
+    file: lib/FCGI/Async/Stream.pm
+    version: 0.21
+  Plack::Handler::FCGI::Async:
+    file: lib/Plack/Handler/FCGI/Async.pm
+    version: 0.21
 requires:
   Encode: 0
+  HTTP::Request: 0
+  HTTP::Response: 0
   IO::Async::Listener: 0.23
   IO::Async::Loop: 0.16
   IO::Async::Test: 0
   Net::FastCGI::Constant: 0.10
   Net::FastCGI::Protocol: 0.10
+  Tie::Handle: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.20
+version: 0.21

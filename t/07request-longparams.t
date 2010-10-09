@@ -29,9 +29,6 @@ my $fcgi = FCGI::Async->new(
 
 my $C = connect_client_sock( $selfaddr );
 
-# Got it - now pretend to be an FCGI client, such as how a webserver would
-# behave.
-
 my $paramvalue = "A" x 240; # Important that 240 is bigger than 127
 
 $C->syswrite(

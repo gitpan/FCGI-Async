@@ -29,9 +29,6 @@ my $fcgi = FCGI::Async->new(
 
 my $C = connect_client_sock( $selfaddr );
 
-# Got it - now pretend to be an FCGI client, such as how a webserver would
-# behave.
-
 $C->syswrite(
    # Begin
    fcgi_trans( type => 1, id => 1, data => "\0\1\0\0\0\0\0\0" ) .
