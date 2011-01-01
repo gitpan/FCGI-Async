@@ -11,7 +11,7 @@ use warnings;
 use FCGI::Async::PSGI;
 use IO::Async::Loop;
 
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 
 =head1 NAME
 
@@ -60,25 +60,38 @@ sub run
 
       $loop->add( $fcgi );
 
-      my %listenargs;
       if( $self->{socket} ) {
-         $listenargs{handle} = $self->{socket};
+         my $path = $self->{socket};
+
+         require IO::Socket::UNIX;
+
+         unlink $path if -e $path;
+
+         my $socket = IO::Socket::UNIX->new(
+            Local  => $path,
+            Listen => 10,
+         ) or die "Cannot listen on $path - $!";
+
+         $fcgi->configure( handle => $socket );
       }
       else {
-         ( $listenargs{host}, $listenargs{service} ) = $listen =~ m/^(.*):(.*?)$/;
+         my ( $host, $service ) = $listen =~ m/^(.*):(.*?)$/;
+
+         $fcgi->listen(
+            host    => $host,
+            service => $service,
+
+            on_notifier => sub { $self->{server_ready} and $self->{server_ready}->() },
+
+            on_resolve_error => sub {
+               die "Cannot resolve - $_[-1]\n";
+            },
+            on_listen_error => sub {
+               die "Cannot listen - $_[-1]\n";
+            },
+         );
       }
 
-      $fcgi->listen(
-         %listenargs,
-         on_notifier => sub { $self->{server_ready} and $self->{server_ready}->() },
-
-         on_resolve_error => sub {
-            die "Cannot resolve - $_[-1]\n";
-         },
-         on_listen_error => sub {
-            die "Cannot listen - $_[-1]\n";
-         },
-      );
    }
 
    $loop->loop_forever;

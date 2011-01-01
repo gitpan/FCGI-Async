@@ -3,7 +3,8 @@
 use strict;
 use lib 't/lib';
 
-use Test::More tests => 14;
+use Test::More tests => 15;
+use Test::Identity;
 use Test::HexString;
 use Test::Refcount;
 
@@ -13,20 +14,6 @@ use IO::Async::Test;
 use FCGI::Async::PSGI;
 
 use TestFCGI;
-
-use Scalar::Util qw( refaddr );
-sub identical
-{
-   my ( $got, $expected, $name ) = @_;
-
-   my $got_addr = refaddr $got;
-   my $exp_addr = refaddr $expected;
-
-   ok( !defined $got_addr && !defined $exp_addr ||
-          $got_addr == $exp_addr,
-       $name ) or
-      diag( "Expected $got and $expected to refer to the same object" );
-}
 
 my ( $S, $selfaddr ) = make_server_sock;
 
@@ -86,8 +73,9 @@ ok( defined(delete $received_env->{'psgi.input'}), "psgi.input exists" );
 ok( defined(delete $received_env->{'psgi.errors'}), "psgi.errors exists" );
 
 identical( delete $received_env->{'fcgi.async'}, $fcgi, "fcgi.async is \$fcgi" );
-isa_ok( delete $received_env->{'fcgi.async.req'}, "FCGI::Async::Request", "fcgi.async.req" );
+can_ok( delete $received_env->{'fcgi.async.req'}, "params" );
 identical( delete $received_env->{'fcgi.async.loop'}, $loop, "fcgi.async.loop is \$loop" );
+identical( delete $received_env->{'io.async.loop'}, $loop, "io.async.loop is \$loop" );
 
 is_deeply( $received_env,
    {

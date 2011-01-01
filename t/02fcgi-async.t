@@ -3,7 +3,7 @@
 use strict;
 use lib 't/lib';
 
-use Test::More tests => 9;
+use Test::More tests => 8;
 use Test::HexString;
 use Test::Refcount;
 
@@ -49,8 +49,6 @@ $C->syswrite(
 );
 
 wait_for { defined $request };
-
-isa_ok( $request, 'FCGI::Async::Request', '$request isa FCGI::Async::Request' );
 
 is_deeply( $request->params,
            {},

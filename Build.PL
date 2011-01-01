@@ -6,15 +6,7 @@ use Module::Build;
 my $build = Module::Build->new(
    module_name => 'FCGI::Async',
    requires => {
-      'Encode' => 0,
-      'HTTP::Request' => 0,
-      'HTTP::Response' => 0,
-      'IO::Async::Listener' => '0.23',
-      'IO::Async::Loop' => '0.16',
-      'IO::Async::Test' => 0,
-      'Net::FastCGI::Constant' => '0.10',
-      'Net::FastCGI::Protocol' => '0.10',
-      'Tie::Handle' => 0,
+      'Net::Async::FastCGI' => 0,
    },
    build_requires => {
       'Test::HexString' => 0,

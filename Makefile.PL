@@ -5,18 +5,10 @@ WriteMakefile
           'NAME' => 'FCGI::Async',
           'VERSION_FROM' => 'lib/FCGI/Async.pm',
           'PREREQ_PM' => {
-                           'Encode' => 0,
-                           'HTTP::Request' => 0,
-                           'HTTP::Response' => 0,
-                           'IO::Async::Listener' => '0.23',
-                           'IO::Async::Loop' => '0.16',
-                           'IO::Async::Test' => 0,
-                           'Net::FastCGI::Constant' => '0.10',
-                           'Net::FastCGI::Protocol' => '0.10',
+                           'Net::Async::FastCGI' => 0,
                            'Test::HexString' => 0,
                            'Test::More' => 0,
-                           'Test::Refcount' => 0,
-                           'Tie::Handle' => 0
+                           'Test::Refcount' => 0
                          },
           'INSTALLDIRS' => 'site',
           'EXE_FILES' => [],

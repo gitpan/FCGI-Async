@@ -12,7 +12,7 @@ use Carp;
 
 use base qw( FCGI::Async );
 
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 
 my $CRLF = "\x0d\x0a";
 
@@ -118,10 +118,11 @@ The C<FCGI::Async::PSGI> object serving the request
 
 The L<FCGI::Async::Request> object representing this particular request
 
-=item C<fcgi.async.loop>
+=item C<io.async.loop>
 
 The L<IO::Async::Loop> object that the C<FCGI::Async::PSGI> object is a member
-of
+of. This is also provided as C<fcgi.async.loop> for backward-compatibility
+with version 0.21, but at some point will be removed.
 
 =back
 
@@ -150,6 +151,7 @@ sub process_request
       'fcgi.async'      => $self,
       'fcgi.async.req'  => $req,
       'fcgi.async.loop' => $self->get_loop,
+      'io.async.loop'   => $self->get_loop,
    );
 
    my $resp = $self->{app}->( \%env );
@@ -166,10 +168,7 @@ sub process_request
       if( !defined $body ) {
          croak "Responder given no body in void context" unless defined wantarray;
 
-         return FCGI::Async::Request::TiedHandle->new(
-            WRITE => sub { $req->print_stdout( $_[1] ) },
-            CLOSE => sub { $req->finish( 0 ) },
-         );
+         return $req->stdout_with_close;
       }
 
       if( ref $body eq "ARRAY" ) {
